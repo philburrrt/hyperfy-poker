@@ -1,7 +1,6 @@
 {
-  "id": "cards",
-  "name": "Cards",
+  "id": "poker",
+  "name": "Poker",
   "description": null,
-  "image": "image.png",
-  "category": "basics"
+  "image": "image.png"
 }
