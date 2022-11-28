@@ -1,23 +1,30 @@
-import React, { useState } from 'react'
-import { useSyncState, randomInt, DEG2RAD } from 'hyperfy'
-import { Join } from './user'
-import { Hands, Options, Community, Winner } from './table'
+import React, { useState, useEffect } from 'react'
+import { useSyncState, DEG2RAD } from 'hyperfy'
 import { Hand } from './pokersolver'
+import { UI } from './ui'
+import { Seat } from './seat'
 
-// TODO: One player is showing tie, the other is showing winner
-// TODO: Game crashing on second round
+//TODO: when someone exists during round 5, they are able to rejoin before others have left for some reason
+//TODO: Round 5, all users are instantly '..waiting' and there is no 'done' button
+//TODO: Round 5, there seems to be an invisible button where 'done' should be that removes the user from the game
 
-export const cards = {
-  suits: ['h', 's', 'c', 'd'],
-  cards: ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'],
-}
+export const positions = [
+  [0, 0, 1.5],
+  [1.3, 0, 1.3],
+  [1.5, 0, 0],
+  [1.3, 0, -1.3],
+  [0, 0, -1.5],
+  [-1.3, 0, -1.3],
+  [-1.5, 0, 0],
+  [-1.3, 0, 1.3],
+]
 
 export default function Poker() {
   const [user, setUser] = useState({
-    uid: null,
     seat: null,
+    uid: null,
+    name: null,
   })
-
   return (
     <app>
       <model
@@ -26,12 +33,51 @@ export default function Poker() {
         scale={0.001}
         rotation={[DEG2RAD * 90, 0, 0]}
       />
-      <Join user={user} setUser={setUser} />
-      <Hands user={user} />
-      <Options user={user} />
-      <Community />
-      <Winner />
+      <UI user={user} setUser={setUser} />
+      <Seat user={user} setUser={setUser} />
+      <Winners />
     </app>
+  )
+}
+
+export function Winners() {
+  const [winner] = useSyncState(state => state.winner)
+  const [winningHand] = useSyncState(state => state.winningHand)
+  const [seats] = useSyncState(state => state.seats)
+  const [turn] = useSyncState(state => state.turn)
+
+  return (
+    <>
+      {winner && winningHand && turn.round === 5 && (
+        <>
+          {winner.map((player, idx) => {
+            return (
+              <billboard key={idx} axis="y" position={[0, 0.2, 0]}>
+                <group key={idx}>
+                  <text
+                    key={idx}
+                    value={
+                      seats[player].name === 'Anonymous'
+                        ? `Seat: ${parseInt(player) + 1}`
+                        : seats[player].name
+                    }
+                    position={
+                      winner.length === 1
+                        ? [0, 0.1, 0]
+                        : [0, 0.1 * (idx + 1), 0]
+                    }
+                    color="green"
+                  />
+                </group>
+              </billboard>
+            )
+          })}
+          <billboard axis="y" position={[0, 0.2, 0]}>
+            <text value={winningHand} color="green" />
+          </billboard>
+        </>
+      )}
+    </>
   )
 }
 
@@ -39,160 +85,163 @@ const initialState = {
   deck: [],
   seats: Array(8).fill({
     uid: null,
+    name: null,
     hand: [],
+    handName: null,
     ready: false,
     active: false,
   }),
   turn: {
-    id: 0,
     round: 0,
     community: [],
   },
   winner: [],
+  winningHand: null,
 }
 
 export function getStore(state = initialState) {
   return {
     state,
     actions: {
-      join: (state, uid) => {
-        const seat = Object.values(state.seats).find(seat => seat.uid === null)
-        if (seat) {
-          seat.uid = uid
-          seat.active = true
+      join(state, { idx, uid, name }) {
+        state.seats[idx] = { uid, name, ready: false, active: false }
+        console.log(`Seat ${idx + 1} joined by ${name} || ${uid}`)
+      },
+      exit(state, { idx }) {
+        state.seats[idx] = {
+          uid: null,
+          name: null,
+          hand: [],
+          handName: null,
+          ready: false,
+          active: false,
         }
+        if (state.seats.every(seat => !seat.uid)) {
+          state.turn.round = 0
+          state.turn.community = []
+          state.winner = []
+          state.deck = []
+          console.log(`All seats empty, resetting game`)
+        }
+        const seated = Object.keys(state.seats).filter(
+          key => state.seats[key].uid
+        )
+        if (seated.length === 1) {
+          state.winner = seated
+          state.winningHand = 'Last player standing'
+          state.turn.round = 5
+          console.log(`One seat left, moving to round 5`)
+        }
+        console.log(`Seat ${idx + 1} is now empty`)
       },
-      deal: state => {
-        state.deck = []
-        cards.suits.forEach(suit => {
-          cards.cards.forEach(card => {
-            state.deck.push({ suit, card })
-          })
-        })
-        state.deck = state.deck.sort(() => randomInt(0, 1) - 0.5)
-        Object.values(state.seats).forEach(seat => {
-          if (seat.uid) {
-            seat.hand = [state.deck.pop(), state.deck.pop()]
-          }
-        })
+      deck(state, { deck }) {
+        state.deck = deck
       },
-      ready: (state, seat) => {
-        //* starts game, resets game, and acts as 'call' button
-        state.seats[seat].ready = true
+      ready(state, { idx }) {
+        state.seats[idx].ready = true
+        state.seats[idx].active = true
+        console.log(`Seat ${idx + 1} is ready`)
 
-        //* If all active players are ready, move to the next round
-        if (
-          Object.values(state.seats).filter(seat => seat.ready).length ===
-          Object.values(state.seats).filter(seat => seat.active).length
-        ) {
-          //* if there's only one active player, skip to the 5th round (showdown)
-          if (
-            Object.values(state.seats).filter(seat => seat.active).length ===
-              1 &&
-            state.turn.round > 0
-          ) {
-            console.log(`only one player left, moving to round 5`)
-            state.turn.round = 5
-            if (state.deck.length === 0) {
-              cards.suits.forEach(suit => {
-                cards.cards.forEach(card => {
-                  state.deck.push({ suit, card })
-                })
-              })
-              state.deck = state.deck.sort(() => randomInt(0, 1) - 0.5)
-            }
-            while (state.turn.community.length < 5) {
-              state.turn.community.push(state.deck.pop())
-            }
-            return
-          }
-          //* otherwise:
-          //* move to the next round
-          //* reset ready state
-          //* depending on the round, deal the appropriate number of community cards
-          //* if showdown is over (round 5), reset the game
-          state.turn.round++
-          if (state.turn.round === 6) {
-            state.turn.round = 0
-            state.winner = []
-            Object.values(state.seats).forEach(seat => {
-              seat.hand = []
+        const active = state.seats.filter(seat => seat.active)
+        const ready = state.seats.filter(seat => seat.ready)
+
+        if (active.length === ready.length) {
+          if (state.turn.round === 0 && active.length != 1) {
+            state.seats.forEach(seat => {
               seat.ready = false
             })
-            state.turn.community = []
-          } else if (state.turn.round === 2) {
+            state.turn.round = 1
+            Object.values(state.seats).forEach(seat => {
+              if (seat.uid) {
+                seat.hand = [state.deck.pop(), state.deck.pop()]
+              }
+            })
+            console.log(`All seats ready, starting round 1`)
+          } else if (state.turn.round === 1) {
+            state.seats.forEach(seat => {
+              seat.ready = false
+            })
+            state.turn.round = 2
             state.turn.community = [
               state.deck.pop(),
               state.deck.pop(),
               state.deck.pop(),
             ]
+            console.log(`All seats ready, starting round 2`)
+          } else if (state.turn.round === 2) {
+            state.seats.forEach(seat => {
+              seat.ready = false
+            })
+            state.turn.round = 3
+            state.turn.community.push(state.deck.pop())
+            console.log(`All seats ready, starting round 3`)
           } else if (state.turn.round === 3) {
-            state.turn.community = [...state.turn.community, state.deck.pop()]
+            state.seats.forEach(seat => {
+              seat.ready = false
+            })
+            state.turn.round = 4
+            state.turn.community.push(state.deck.pop())
+            console.log(`All seats ready, starting round 4`)
           } else if (state.turn.round === 4) {
-            state.turn.community = [...state.turn.community, state.deck.pop()]
+            // make a list of keys of seats that are active
+            state.seats.forEach(seat => {
+              seat.ready = false
+            })
+            const activeSeats = Object.keys(state.seats).filter(
+              key => state.seats[key].active
+            )
+            // make a list of hands for each active seat
+            const hands = Object.keys(activeSeats).map(key => {
+              const seat = state.seats[activeSeats[key]]
+              const hand = Hand.solve([...seat.hand, ...state.turn.community])
+              return hand
+            })
+            // assign hand.name to according active seat's handName
+            hands.forEach((hand, idx) => {
+              state.seats[activeSeats[idx]].handName = hand.name
+            })
+            // find the best hand
+            const bestHand = Hand.winners(hands)
+            state.winningHand = bestHand[0].name
+            // find the seat(s) with the best hand
+            const winners = activeSeats.filter(
+              key => state.seats[key].handName === bestHand[0].name
+            )
+            // assign the winner(s) to state.winner
+            state.winner = Object.keys(winners).map(key => winners[key])
+            console.log(`Winner(s): ${winners}`)
+            console.log(`All seats ready, starting round 5`)
+            state.turn.round = 5
           } else if (state.turn.round === 5) {
-            // determine winner(s)
-            const community = state.turn.community.map(card => {
-              return `${card.card}${card.suit}`
+            // reset game when all users click 'done'
+            state.seats.forEach(seat => {
+              seat.ready = false
+              seat.active = false
+              seat.hand = []
+              seat.handName = null
             })
-            const hands = Object.keys(state.seats)
-              .filter(seat => state.seats[seat].active)
-              .map(seat => {
-                return state.seats[seat].hand.map(card => {
-                  return `${card.card}${card.suit}`
-                })
-              })
-            const uids = Object.keys(state.seats)
-              .filter(seat => state.seats[seat].active)
-              .map(seat => {
-                return state.seats[seat].uid
-              })
-            const results = hands.map(hand => {
-              return Hand.solve([...hand, ...community])
-            })
-            const winner = Hand.winners(results)[0].name
-            console.log(`Hand results: ${results.map(result => result.name)}`)
-            console.log(winner)
-            results.forEach((result, i) => {
-              if (result.name === winner) {
-                state.winner.push(uids[i])
-              }
-            })
-            console.log(`winner: ${state.winner}`)
+            state.turn.round = 0
+            state.turn.community = []
+            state.winner = []
+            state.deck = []
+            state.winningHand = null
+            console.log(`All seats ready, resetting game`)
           }
-          Object.values(state.seats).forEach(seat => {
-            seat.ready = false
-          })
         }
       },
-      fold: (state, seat) => {
-        state.seats[seat].hand = []
-        state.seats[seat].active = false
-      },
-      exit: (state, seat) => {
-        state.seats[seat].uid = null
-        state.seats[seat].hand = []
-        state.seats[seat].ready = false
-        state.seats[seat].active = false
-        //* if all seats are empty, reset game
-        if (
-          Object.keys(state.seats).every(seat => state.seats[seat].uid === null)
-        ) {
-          state.turn.round = 0
-          state.turn.community = []
-          state.deck = []
+      fold(state, { idx }) {
+        state.seats[idx].active = false
+        console.log(`Seat ${idx + 1} folded`)
+        // if only one player is active, set their seat as winner and set round to 5
+        const activeSeats = Object.keys(state.seats).filter(
+          key => state.seats[key].active
+        )
+        if (activeSeats.length === 1) {
+          state.winner = activeSeats
+          state.winningHand = 'Last player standing'
+          state.turn.round = 5
+          console.log(`One seat left, moving to round 5`)
         }
-      },
-      reset: state => {
-        state.turn.round = 0
-        state.turn.community = []
-        state.deck = []
-        Object.values(state.seats).forEach(seat => {
-          seat.uid = null
-          seat.hand = []
-          seat.ready = false
-          seat.active = false
-        })
       },
     },
   }

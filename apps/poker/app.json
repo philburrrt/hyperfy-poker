@@ -1,6 +1,7 @@
 {
-  "id": "poker",
-  "name": "Poker",
+  "id": "beta-poker",
+  "name": "Poker (Beta)",
   "description": null,
-  "image": "image.png"
+  "image": "image.png",
+  "category": "objects"
 }
