@@ -16,7 +16,6 @@ export function Seat({ user, setUser }) {
   useEffect(() => {
     if (!world.isServer) return
     if (turn.round === 0) {
-      console.log('Shuffling deck...')
       const deck = []
       cards.suits.forEach(suit => {
         cards.cards.forEach(card => {
@@ -25,13 +24,8 @@ export function Seat({ user, setUser }) {
       })
       deck.sort(() => randomInt(0, 1) - 0.5)
       dispatch('deck', { deck })
-      console.log('Deck shuffled: ', deck)
     }
   }, [turn.round])
-
-  useEffect(() => {
-    console.log(user.seat)
-  }, ['user seat (client): ', user.seat])
 
   return (
     <>
@@ -105,12 +99,7 @@ export function Name({ idx }) {
 
 export function Join({ idx, setUser, round }) {
   const [seats, dispatch] = useSyncState(state => state.seats)
-  //TODO: for some reason, if this is if (turn.round != 0), it does not return
   const taken = seats[idx].uid !== null
-
-  useEffect(() => {
-    console.log('round (client): ', round)
-  }, [round])
 
   return (
     <>

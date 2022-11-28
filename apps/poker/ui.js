@@ -39,7 +39,6 @@ export function Options({ idx }) {
         position={[0, -0.1, 0]}
         onClick={() => {
           dispatch('ready', { idx })
-          console.log('Clicked call / done')
         }}
         bgColor={'black'}
         color={'white'}
@@ -90,7 +89,6 @@ export function Exit({ idx, setUser }) {
         onClick={() => {
           dispatch('exit', { idx })
           setUser({ seat: null, uid: null, name: null })
-          console.log('Clicked exit')
         }}
         bgColor={'black'}
         color={'white'}

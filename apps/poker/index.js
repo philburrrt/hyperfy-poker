@@ -4,10 +4,6 @@ import { Hand } from './pokersolver'
 import { UI } from './ui'
 import { Seat } from './seat'
 
-//TODO: when someone exists during round 5, they are able to rejoin before others have left for some reason
-//TODO: Round 5, all users are instantly '..waiting' and there is no 'done' button
-//TODO: Round 5, there seems to be an invisible button where 'done' should be that removes the user from the game
-
 export const positions = [
   [0, 0, 1.5],
   [1.3, 0, 1.3],
@@ -105,7 +101,6 @@ export function getStore(state = initialState) {
     actions: {
       join(state, { idx, uid, name }) {
         state.seats[idx] = { uid, name, ready: false, active: false }
-        console.log(`Seat ${idx + 1} joined by ${name} || ${uid}`)
       },
       exit(state, { idx }) {
         state.seats[idx] = {
@@ -121,7 +116,6 @@ export function getStore(state = initialState) {
           state.turn.community = []
           state.winner = []
           state.deck = []
-          console.log(`All seats empty, resetting game`)
         }
         const seated = Object.keys(state.seats).filter(
           key => state.seats[key].uid
@@ -130,9 +124,7 @@ export function getStore(state = initialState) {
           state.winner = seated
           state.winningHand = 'Last player standing'
           state.turn.round = 5
-          console.log(`One seat left, moving to round 5`)
         }
-        console.log(`Seat ${idx + 1} is now empty`)
       },
       deck(state, { deck }) {
         state.deck = deck
@@ -140,7 +132,6 @@ export function getStore(state = initialState) {
       ready(state, { idx }) {
         state.seats[idx].ready = true
         state.seats[idx].active = true
-        console.log(`Seat ${idx + 1} is ready`)
 
         const active = state.seats.filter(seat => seat.active)
         const ready = state.seats.filter(seat => seat.ready)
@@ -156,7 +147,6 @@ export function getStore(state = initialState) {
                 seat.hand = [state.deck.pop(), state.deck.pop()]
               }
             })
-            console.log(`All seats ready, starting round 1`)
           } else if (state.turn.round === 1) {
             state.seats.forEach(seat => {
               seat.ready = false
@@ -167,21 +157,18 @@ export function getStore(state = initialState) {
               state.deck.pop(),
               state.deck.pop(),
             ]
-            console.log(`All seats ready, starting round 2`)
           } else if (state.turn.round === 2) {
             state.seats.forEach(seat => {
               seat.ready = false
             })
             state.turn.round = 3
             state.turn.community.push(state.deck.pop())
-            console.log(`All seats ready, starting round 3`)
           } else if (state.turn.round === 3) {
             state.seats.forEach(seat => {
               seat.ready = false
             })
             state.turn.round = 4
             state.turn.community.push(state.deck.pop())
-            console.log(`All seats ready, starting round 4`)
           } else if (state.turn.round === 4) {
             // make a list of keys of seats that are active
             state.seats.forEach(seat => {
@@ -209,8 +196,7 @@ export function getStore(state = initialState) {
             )
             // assign the winner(s) to state.winner
             state.winner = Object.keys(winners).map(key => winners[key])
-            console.log(`Winner(s): ${winners}`)
-            console.log(`All seats ready, starting round 5`)
+
             state.turn.round = 5
           } else if (state.turn.round === 5) {
             // reset game when all users click 'done'
@@ -225,13 +211,11 @@ export function getStore(state = initialState) {
             state.winner = []
             state.deck = []
             state.winningHand = null
-            console.log(`All seats ready, resetting game`)
           }
         }
       },
       fold(state, { idx }) {
         state.seats[idx].active = false
-        console.log(`Seat ${idx + 1} folded`)
         // if only one player is active, set their seat as winner and set round to 5
         const activeSeats = Object.keys(state.seats).filter(
           key => state.seats[key].active
@@ -240,7 +224,6 @@ export function getStore(state = initialState) {
           state.winner = activeSeats
           state.winningHand = 'Last player standing'
           state.turn.round = 5
-          console.log(`One seat left, moving to round 5`)
         }
       },
     },
