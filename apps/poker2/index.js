@@ -3,10 +3,17 @@ import { useSyncState, DEG2RAD, useWorld } from 'hyperfy'
 
 export default function Poker() {
   const world = useWorld()
+
+  // ! Revert after testing
+  // const [user, setUser] = useState({
+  //   seat: null,
+  //   uid: null,
+  //   name: null,
+  // })
   const [user, setUser] = useState({
-    seat: null,
-    uid: null,
-    name: null,
+    seat: 0,
+    uid: 'player1',
+    name: 'Philbert',
   })
 
   return (
@@ -31,27 +38,28 @@ export function Test() {
   const [state, dispatch] = useSyncState(state => state)
   const [time] = useSyncState(state => state.time)
   const [phase] = useSyncState(state => state.phase)
+  const [turn] = useSyncState(state => state.turn)
+
+  const info = [
+    { label: 'time', value: time },
+    { label: 'phase', value: phase },
+    { label: 'turn', value: turn },
+  ]
 
   return (
     <>
-      <text
-        value={`Time: ${time}`}
-        position={[0, 1.5, 0]}
-        color="white"
-        bgColor="black"
-        padding={0.025}
-        bgRadius={0.01}
-        fontSize={0.05}
-      />
-      <text
-        value={`Phase: ${phase}`}
-        position={[0, 1.45, 0]}
-        color="white"
-        bgColor="black"
-        padding={0.025}
-        bgRadius={0.01}
-        fontSize={0.05}
-      />
+      {info.map(({ label, value }, i) => (
+        <text
+          key={i}
+          value={`${label}: ${value}`}
+          position={[0, 1.75 - 0.05 * i, 0]}
+          color="white"
+          bgColor="black"
+          padding={0.025}
+          bgRadius={0.01}
+          fontSize={0.05}
+        />
+      ))}
     </>
   )
 }
@@ -235,22 +243,35 @@ export function Seat({ seat }) {
   )
 }
 
-export function Actions() {
+export function Actions({ seat }) {
+  const [player, dispatch] = useSyncState(state => state.players[seat])
+  const [turn] = useSyncState(state => state.turn)
+  const { bet } = player ? player : { bet: 0 }
   // fold, call or raise
-  const buttons = ['Fold', 'Call', 'Raise']
+  const buttons = [
+    { value: 'Fold', action: 'fold' },
+    { value: 'Call', action: 'call' },
+    { value: 'Raise', action: 'raise' },
+  ]
   return (
     <>
       <group position={[0, -0.05, 0.01]}>
         {buttons.map((button, i) => (
           <text
             key={i}
-            value={button}
+            value={button.value}
             position={[0, 0.045 * i, 0]}
             color="white"
             bgColor="black"
             fontSize={0.02}
             padding={0.01}
             bgRadius={0.01}
+            onClick={() => {
+              if (seat !== turn) return
+              if (button.action === 'fold') dispatch('fold', seat)
+              if (button.action === 'raise') dispatch('bet', seat, bet * 2)
+              if (button.action === 'call') dispatch('bet', seat, bet)
+            }}
           />
         ))}
       </group>
@@ -297,7 +318,7 @@ export function Bet({ seat }) {
 
 const QUEUE_TIME = 10
 const ENDING_TIME = 10
-const TURN_TIME = 10
+const TURN_TIME = 30000 // 30 seconds to act
 export function ServerLogic() {
   const world = useWorld()
   const [state, dispatch] = useSyncState(state => state)
@@ -342,15 +363,12 @@ export function ServerLogic() {
     if (phase === 'active') {
       const turn = state.turn
       return world.onUpdate(() => {
-        const now = world.getTime()
-        const elapsed = now - state.time
-        if (elapsed > TURN_TIME) {
-          dispatch('setTurn', (turn + 1) % 8)
+        setTimeout(() => {
           dispatch('fold', turn)
-        }
+        }, [TURN_TIME])
       })
     }
-  }, [turn])
+  }, [turn, phase])
 
   return null
 }
@@ -365,13 +383,37 @@ const player = {
   time: 0,
   hand: [],
 }
+// ! Revert after testing
+const player1 = {
+  name: 'Philbert',
+  uid: 'player1',
+  seat: 0,
+  action: null,
+  money: 1000,
+  bet: 0,
+  time: 0,
+  hand: [],
+}
+
+const player2 = {
+  name: 'Player 2',
+  uid: 'player2',
+  seat: 1,
+  action: null,
+  money: 1000,
+  bet: 0,
+  time: 0,
+  hand: [],
+}
 
 const initialState = {
   phase: 'idle', // idle -> queued -> active -> end
-  taken: [false, false, false, false, false, false, false, false],
+  // ! Revert after testing
+  // taken: [false, false, false, false, false, false, false, false],
+  taken: [true, true, false, false, false, false, false, false],
   pot: 0,
   turn: 0,
-  players: [player, player, player, player, player, player, player, player],
+  players: [player1, player2, player, player, player, player, player, player],
   community: [],
   time: 0,
 }
