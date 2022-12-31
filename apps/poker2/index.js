@@ -136,8 +136,8 @@ export function UI({ seat, user, setUser }) {
         {!occupied && <Join seat={seat} setUser={setUser} />}
         {occupied && (
           <>
-            <Actions />
-            <Bet seat={seat} />
+            <Actions seat={seat} user={user} />
+            <PoolInfo seat={seat} />
           </>
         )}
       </group>
@@ -199,9 +199,6 @@ export function Hand() {
 
 export function Seat({ seat }) {
   // all public info
-  // seat number
-  // player name
-  // player time remaining
   const [player] = useSyncState(state => state.players[seat])
   const name = player.name ? player.name : null
   const time = player.time ? player.time : 0
@@ -243,10 +240,10 @@ export function Seat({ seat }) {
   )
 }
 
-export function Actions({ seat }) {
-  const [player, dispatch] = useSyncState(state => state.players[seat])
-  const [turn] = useSyncState(state => state.turn)
-  const { bet } = player ? player : { bet: 0 }
+export function Actions({ seat, user }) {
+  const [turn, dispatch] = useSyncState(state => state.turn)
+  const [taken] = useSyncState(state => state.taken)
+  const [bet] = useSyncState(state => state.bet)
   // fold, call or raise
   const buttons = [
     { value: 'Fold', action: 'fold' },
@@ -255,7 +252,7 @@ export function Actions({ seat }) {
   ]
   return (
     <>
-      <group position={[0, -0.05, 0.01]}>
+      <group key={seat} position={[0, -0.05, 0.01]}>
         {buttons.map((button, i) => (
           <text
             key={i}
@@ -267,10 +264,23 @@ export function Actions({ seat }) {
             padding={0.01}
             bgRadius={0.01}
             onClick={() => {
-              if (seat !== turn) return
+              if (seat !== turn) return console.log('not your turn')
+              if (seat !== user.seat) return console.log('not your seat')
               if (button.action === 'fold') dispatch('fold', seat)
-              if (button.action === 'raise') dispatch('bet', seat, bet * 2)
-              if (button.action === 'call') dispatch('bet', seat, bet)
+              let amount
+              if (bet === 0) {
+                amount = 3
+              } else if (bet === 3) {
+                amount = 6
+              } else {
+                amount = bet
+              }
+              if (button.action === 'call') dispatch('bet', seat, amount)
+              if (button.action === 'raise') dispatch('bet', seat, amount * 2)
+              // next seat
+              let next = taken.indexOf(true, seat + 1)
+              if (next === -1) next = taken.indexOf(true)
+              dispatch('setTurn', next)
             }}
           />
         ))}
@@ -279,7 +289,7 @@ export function Actions({ seat }) {
   )
 }
 
-export function Bet({ seat }) {
+export function PoolInfo({ seat }) {
   // current pot
   // player's bet
   // player's money
@@ -287,7 +297,8 @@ export function Bet({ seat }) {
   if (!player) return null
   const [pot] = useSyncState(state => state.pot)
   const [turn] = useSyncState(state => state.turn)
-  const { bet, money } = player
+  const [bet] = useSyncState(state => state?.bet || 0)
+  const { money } = player
 
   const info = [
     { Label: 'Pot', Value: pot },
@@ -316,9 +327,8 @@ export function Bet({ seat }) {
   )
 }
 
-const QUEUE_TIME = 10
+const QUEUE_TIME = 2.5
 const ENDING_TIME = 10
-const TURN_TIME = 30000 // 30 seconds to act
 export function ServerLogic() {
   const world = useWorld()
   const [state, dispatch] = useSyncState(state => state)
@@ -328,6 +338,7 @@ export function ServerLogic() {
     if (phase === 'idle') {
       const taken = state.taken.filter(Boolean)
       if (taken.length > 1) {
+        dispatch('reset')
         dispatch('setPhase', 'queued', world.getTime())
       }
     }
@@ -346,29 +357,23 @@ export function ServerLogic() {
         dispatch('setPhase', 'end', world.getTime())
       }
     }
+    if (phase === 'active') {
+      if (state.round === null) {
+        dispatch('setRound', 'preflop')
+      }
+    }
     if (phase === 'ending') {
       return world.onUpdate(() => {
         const now = world.getTime()
         const elapsed = now - state.time
         if (elapsed > ENDING_TIME) {
           dispatch('setPhase', 'idle')
-          dispatch('reset')
         }
       })
     }
   }, [phase, taken])
 
-  // max time limit for turn
-  useEffect(() => {
-    if (phase === 'active') {
-      const turn = state.turn
-      return world.onUpdate(() => {
-        setTimeout(() => {
-          dispatch('fold', turn)
-        }, [TURN_TIME])
-      })
-    }
-  }, [turn, phase])
+  // todo: max time limit for turn
 
   return null
 }
@@ -401,18 +406,22 @@ const player2 = {
   seat: 1,
   action: null,
   money: 1000,
-  bet: 0,
   time: 0,
   hand: [],
 }
 
 const initialState = {
   phase: 'idle', // idle -> queued -> active -> end
+  round: null,
+  winner: null,
   // ! Revert after testing
   // taken: [false, false, false, false, false, false, false, false],
   taken: [true, true, false, false, false, false, false, false],
   pot: 0,
+  bet: 0,
   turn: 0,
+  // ! Revert after testing
+  // players: [player, player, player, player, player, player, player, player],
   players: [player1, player2, player, player, player, player, player, player],
   community: [],
   time: 0,
@@ -425,40 +434,63 @@ export function getStore(state = initialState) {
       join(state, seat, name, uid) {
         state.taken[seat] = true
         state.players[seat] = { name, uid, seat, money: 1000, bet: 0, time: 0 }
+        console.log(`Seat ${seat + 1} taken by ${name} (${uid})`)
       },
       leave(state, seat) {
         state.taken[seat] = false
         state.players[seat] = player
       },
-      setPhase(state, phase, time = 0) {
-        state.phase = phase
-        state.time = time
-      },
-      setTurn(state, turn) {
-        state.turn = turn
-      },
-      bet(state, seat, amount) {
-        state.players[seat].bet += amount
-        state.players[seat].money -= amount
-        state.pot += amount
-        state.turn = (seat + 1) % 8
-      },
-      fold(state, seat) {
-        state.players[seat].bet = 0
-        state.players[seat].hand = []
-        state.turn = (seat + 1) % 8
-      },
-      win(state, seat, amount) {
-        state.players[seat].money += amount
-        state.phase = 'end'
-      },
       reset(state) {
         state.pot = 0
         state.turn = 0
         state.community = []
-        state.players.forEach(player => {
-          player.hand = []
+        state.deck = []
+        state.winner = null
+        state.round = null
+        state.players.forEach((player, i) => {
+          state.players[i].bet = 0
+          state.players[i].action = null
+          state.players[i].time = 0
+          state.players[i].hand = []
         })
+      },
+      setPhase(state, phase, time = 0) {
+        state.phase = phase
+        state.time = time
+        console.log(`Phase: ${phase}`)
+      },
+      setRound(state, round) {
+        state.round = round
+        // reset player actions
+        state.players.forEach((player, i) => {
+          state.players[i].action = null
+          state.players[i].time = 0
+        })
+        console.log(`Round: ${round}`)
+      },
+      bet(state, seat, amount) {
+        // if amount == state.bet, then don't add it to bet
+        console.log('bet', amount, state.bet)
+        if (amount > state.bet) {
+          state.bet += amount
+        }
+        state.players[seat].money -= amount
+        state.pot += amount
+        console.log(
+          `Seat ${seat + 1} bet ${amount} and now has ${
+            state.players[seat].money
+          } left`
+        )
+      },
+      setTurn(state, seat) {
+        state.turn = seat
+        console.log(`Seat ${seat + 1} is up`)
+      },
+      fold(state, seat) {
+        state.players[seat].bet = 0
+        state.players[seat].hand = []
+        state.players[seat].action = 'fold'
+        console.log(`Seat ${seat + 1} folded`)
       },
     },
   }
