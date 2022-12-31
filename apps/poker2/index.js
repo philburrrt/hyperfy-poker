@@ -16,16 +16,16 @@ export default function Poker() {
   const world = useWorld()
 
   // ! Revert after testing
-  // const [user, setUser] = useState({
-  //   seat: null,
-  //   uid: null,
-  //   name: null,
-  // })
   const [user, setUser] = useState({
-    seat: 0,
-    uid: 'player1',
-    name: 'Philbert',
+    seat: null,
+    uid: null,
+    name: null,
   })
+  // const [user, setUser] = useState({
+  //   seat: 0,
+  //   uid: 'player1',
+  //   name: 'Philbert',
+  // })
 
   return (
     <app>
@@ -99,21 +99,60 @@ export function Node({ user, setUser }) {
   )
 }
 
+/*
+  - idle
+  - 2 players join
+  - queued
+  - active
+  - intermission -> preflop -> flop -> turn -> river -> showdown -> intermission
+  - during intermission, player hands, the bet amount, and the pot amount are reset
+  - turn = first in taken || first in taken after winner
+  - players can join during intermission
+  - if only 1 player left, game winds down (all variables reset)
+*/
+
 const QUEUE_TIME = 2.5
 const ENDING_TIME = 10
 export function ServerLogic() {
   const world = useWorld()
   const [state, dispatch] = useSyncState(state => state)
-  const { phase, turn, players, taken } = state
+  const { phase, turn, players, taken, round, actions } = state
+
+  function getNextRound() {
+    if (round === 'intermission') return 'preflop'
+    if (round === 'preflop') return 'flop'
+    if (round === 'flop') return 'turn'
+    if (round === 'turn') return 'river'
+    if (round === 'river') return 'showdown'
+    if (round === 'showdown') return 'intermission'
+  }
+
+  function getNextTurn() {
+    const takenSeats = taken.map((taken, i) => {
+      if (taken) return i
+    })
+    console.log('takenSeats', takenSeats)
+    const first = state.winner || takenSeats[0]
+    console.log('first', first)
+    let next
+    try {
+      next = takenSeats.find(seat => !state.players[seat].action)
+      console.log('next', next)
+    } catch (e) {
+      next = null
+    }
+    return { first, next }
+  }
 
   useEffect(() => {
+    // if idle and 2 players join, queue game
     if (phase === 'idle') {
       const taken = state.taken.filter(Boolean)
       if (taken.length > 1) {
-        dispatch('reset')
         dispatch('setPhase', 'queued', world.getTime())
       }
     }
+    // wait QUEUE_TIME seconds, then start game when queued
     if (phase === 'queued') {
       return world.onUpdate(() => {
         const now = world.getTime()
@@ -123,6 +162,7 @@ export function ServerLogic() {
         }
       })
     }
+    // if only 1 player left, game winds down
     if (phase === 'queued' || phase === 'active') {
       const taken = state.taken.filter(Boolean)
       if (taken.length === 1) {
@@ -130,11 +170,13 @@ export function ServerLogic() {
       }
     }
     if (phase === 'active') {
-      if (state.round === null) {
-        dispatch('setRound', 'preflop')
+      if (!round) {
+        console.log('New game. Setting round to intermission')
+        dispatch('setRound', 'intermission')
       }
     }
-    if (phase === 'ending') {
+    // wait ENDING_TIME seconds, then reset game
+    if (phase === 'end') {
       return world.onUpdate(() => {
         const now = world.getTime()
         const elapsed = now - state.time
@@ -145,7 +187,54 @@ export function ServerLogic() {
     }
   }, [phase, taken])
 
-  // todo: max time limit for turn
+  useEffect(() => {
+    // if intermission, wait 10 seconds, then start next round
+    if (round === 'intermission') {
+      console.log(
+        `Round is intermission. Waiting 10 seconds before starting next round`
+      )
+      setTimeout(() => {
+        dispatch('setRound', getNextRound())
+      }, 10000)
+    }
+
+    // if preflop, set turn to first in taken || first in taken after winner
+    // if flop, turn, or river, set turn to next in taken
+    // if showdown, set turn to null
+    if (round === 'preflop') {
+      const { first } = getNextTurn()
+      dispatch('setTurn', first)
+    } else if (round === 'flop' || round === 'turn' || round === 'river') {
+      const { next } = getNextTurn()
+      dispatch('setTurn', next)
+    } else if (round === 'showdown') {
+      dispatch('setTurn', null)
+    }
+
+    // if showdown, wait 10 seconds, then start next round (intermission)
+    if (round === 'showdown') {
+      console.log(
+        `Round is showdown. Waiting 10 seconds before starting next round`
+      )
+      setTimeout(() => {
+        dispatch('setRound', getNextRound())
+      }, 10000)
+    }
+  }, [round])
+
+  useEffect(() => {
+    if (actions == 0) return
+    // if getNextTurn().next is null, start next round
+    const { next } = getNextTurn()
+    console.log(`turn just taken, next is ${next}`)
+    if (next === null) {
+      dispatch('setRound', getNextRound())
+    }
+    // otherwise, set turn to next
+    else {
+      dispatch('setTurn', next)
+    }
+  }, [actions])
 
   return null
 }
@@ -160,43 +249,45 @@ const player = {
   time: 0,
   hand: [],
 }
-// ! Revert after testing
-const player1 = {
-  name: 'Philbert',
-  uid: 'player1',
-  seat: 0,
-  action: null,
-  money: 1000,
-  bet: 0,
-  time: 0,
-  hand: [],
-}
+// // ! Revert after testing
+// const player1 = {
+//   name: 'Philbert',
+//   uid: 'player1',
+//   seat: 0,
+//   action: null,
+//   money: 1000,
+//   bet: 0,
+//   time: 0,
+//   hand: [],
+// }
 
-const player2 = {
-  name: 'Player 2',
-  uid: 'player2',
-  seat: 1,
-  action: null,
-  money: 1000,
-  time: 0,
-  hand: [],
-}
+// const player2 = {
+//   name: 'Player 2',
+//   uid: 'player2',
+//   seat: 1,
+//   action: null,
+//   money: 1000,
+//   time: 0,
+//   hand: [],
+// }
 
 const initialState = {
   phase: 'idle', // idle -> queued -> active -> end
-  round: null,
+  // when phase is active, intermission starts
+  round: null, // intermission -> preflop -> flop -> turn -> river -> showdown
   winner: null,
   // ! Revert after testing
-  // taken: [false, false, false, false, false, false, false, false],
-  taken: [true, true, false, false, false, false, false, false],
+  taken: [false, false, false, false, false, false, false, false],
+  // taken: [true, true, false, false, false, false, false, false],
   pot: 0,
   bet: 0,
-  turn: 0,
+  turn: null,
   // ! Revert after testing
-  // players: [player, player, player, player, player, player, player, player],
-  players: [player1, player2, player, player, player, player, player, player],
+  players: [player, player, player, player, player, player, player, player],
+  // players: [player1, player2, player, player, player, player, player, player],
   community: [],
   time: 0,
+  actions: 0,
 }
 
 export function getStore(state = initialState) {
@@ -212,47 +303,33 @@ export function getStore(state = initialState) {
         state.taken[seat] = false
         state.players[seat] = player
       },
-      reset(state) {
-        state.pot = 0
-        state.turn = 0
-        state.community = []
-        state.deck = []
-        state.winner = null
-        state.round = null
-        state.players.forEach((player, i) => {
-          state.players[i].bet = 0
-          state.players[i].action = null
-          state.players[i].time = 0
-          state.players[i].hand = []
-        })
-      },
       setPhase(state, phase, time = 0) {
         state.phase = phase
         state.time = time
         console.log(`Phase: ${phase}`)
       },
       setRound(state, round) {
+        state.actions = 0
         state.round = round
-        // reset player actions
         state.players.forEach((player, i) => {
           state.players[i].action = null
           state.players[i].time = 0
         })
         console.log(`Round: ${round}`)
       },
-      bet(state, seat, amount) {
-        // if amount == state.bet, then don't add it to bet
-        console.log('bet', amount, state.bet)
+      bet(state, type, seat, amount) {
         if (amount > state.bet) {
-          state.bet += amount
+          state.bet = amount
         }
         state.players[seat].money -= amount
         state.pot += amount
+        state.players[seat].action = type
         console.log(
-          `Seat ${seat + 1} bet ${amount} and now has ${
+          `Seat ${seat + 1} - ${type} - ${amount}. now has ${
             state.players[seat].money
           } left`
         )
+        state.actions++
       },
       setTurn(state, seat) {
         state.turn = seat
@@ -262,6 +339,7 @@ export function getStore(state = initialState) {
         state.players[seat].bet = 0
         state.players[seat].hand = []
         state.players[seat].action = 'fold'
+        state.actions++
         console.log(`Seat ${seat + 1} folded`)
       },
     },

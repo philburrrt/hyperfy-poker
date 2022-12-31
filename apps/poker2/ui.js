@@ -32,7 +32,7 @@ export function UI({ seat, user, setUser }) {
 
 export function Join({ seat, setUser }) {
   const world = useWorld()
-  const [taken, dispatch] = useSyncState(state => state.taken[seat])
+  const [round, dispatch] = useSyncState(state => state.taken[seat])
 
   return (
     <text
@@ -86,7 +86,6 @@ export function Seat({ seat }) {
   // all public info
   const [player] = useSyncState(state => state.players[seat])
   const name = player.name ? player.name : null
-  const time = player.time ? player.time : 0
 
   return (
     <>
@@ -110,31 +109,20 @@ export function Seat({ seat }) {
           bgRadius={0.01}
         />
       )}
-      {time !== 0 && (
-        <text
-          value={`Time: ${time}`}
-          position={[0.15, 0.1, 0.0025]}
-          color="white"
-          fontSize={0.02}
-          bgColor="black"
-          padding={0.01}
-          bgRadius={0.01}
-        />
-      )}
     </>
   )
 }
 
 export function Actions({ seat, user }) {
-  const [turn, dispatch] = useSyncState(state => state.turn)
-  const [taken] = useSyncState(state => state.taken)
-  const [bet] = useSyncState(state => state.bet)
+  const [bet, dispatch] = useSyncState(state => state.bet)
+  const [turn] = useSyncState(state => state?.turn)
   // fold, call or raise
   const buttons = [
     { value: 'Fold', action: 'fold' },
     { value: 'Call', action: 'call' },
     { value: 'Raise', action: 'raise' },
   ]
+
   return (
     <>
       <group key={seat} position={[0, -0.05, 0.01]}>
@@ -149,7 +137,8 @@ export function Actions({ seat, user }) {
             padding={0.01}
             bgRadius={0.01}
             onClick={() => {
-              if (seat !== turn) return console.log('not your turn')
+              if (turn == null) return console.log('not active')
+              if (turn && seat !== turn) return console.log('not your turn')
               if (seat !== user.seat) return console.log('not your seat')
               if (button.action === 'fold') dispatch('fold', seat)
               let amount
@@ -160,12 +149,11 @@ export function Actions({ seat, user }) {
               } else {
                 amount = bet
               }
-              if (button.action === 'call') dispatch('bet', seat, amount)
-              if (button.action === 'raise') dispatch('bet', seat, amount * 2)
-              // next seat
-              let next = taken.indexOf(true, seat + 1)
-              if (next === -1) next = taken.indexOf(true)
-              dispatch('setTurn', next)
+              if (button.action === 'call')
+                dispatch('bet', button.action, seat, amount)
+              if (button.action === 'raise')
+                dispatch('bet', button.action, seat, amount * 2)
+              if (button.action === 'fold') dispatch('fold', seat)
             }}
           />
         ))}
@@ -178,15 +166,17 @@ export function PoolInfo({ seat }) {
   const [player] = useSyncState(state => state.players[seat])
   if (!player) return null
   const [pot] = useSyncState(state => state.pot)
-  const [turn] = useSyncState(state => state.turn)
+  const [turn] = useSyncState(state => state?.turn)
   const [bet] = useSyncState(state => state?.bet || 0)
+  const [round] = useSyncState(state => state?.round || 'waiting')
   const { money } = player
 
   const info = [
     { Label: 'Pot', Value: pot },
     { Label: 'Bet', Value: bet },
     { Label: 'Money', Value: money },
-    { Label: 'Turn', Value: `Seat ${turn + 1}` },
+    { Label: 'Turn', Value: turn != null ? `Player ${turn + 1}` : 'none' },
+    { Label: 'Round', Value: round },
   ]
 
   return (
