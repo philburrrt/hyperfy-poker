@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Fragment } from 'react'
-import { useSyncState, DEG2RAD } from 'hyperfy'
+import { useSyncState, DEG2RAD, useWorld } from 'hyperfy'
 
 export default function Poker() {
   // const [user, setUser] = useState({
@@ -19,7 +19,7 @@ export default function Poker() {
     <app>
       <model src="poker_table.glb" scale={0.45} position={[0, 0.95, 0]} />
       <Table />
-      <Node user={user} />
+      <Node user={user} setUser={setUser} />
     </app>
   )
 }
@@ -64,7 +64,7 @@ const positions = [
 ]
 const tiltBack = [DEG2RAD * -35, 0, 0]
 
-export function Node({ user }) {
+export function Node({ user, setUser }) {
   return (
     <>
       {positions.map((pos, i) => (
@@ -77,7 +77,7 @@ export function Node({ user }) {
             position={[0, -0.01, 0]}
             rotation={tiltBack}
           />
-          <UI seat={i} user={user} />
+          <UI seat={i} user={user} setUser={setUser} />
         </group>
       ))}
     </>
@@ -91,7 +91,7 @@ export function Node({ user }) {
 // * Display the current turn
 // * Display the current player
 
-export function UI({ seat, user }) {
+export function UI({ seat, user, setUser }) {
   const [occupied, dispatch] = useSyncState(state => state.taken[seat])
   const [player] = useSyncState(state => state.players[seat])
 
@@ -100,7 +100,7 @@ export function UI({ seat, user }) {
       <group rotation={tiltBack}>
         <Seat seat={seat} />
         {occupied && user.uid === player.uid && <Hand />}
-        {!occupied && <Join />}
+        {!occupied && <Join seat={seat} user={user} setUser={setUser} />}
         {occupied && (
           <>
             <Actions />
@@ -112,7 +112,10 @@ export function UI({ seat, user }) {
   )
 }
 
-export function Join() {
+export function Join({ seat, user, setUser }) {
+  const world = useWorld()
+  const [taken, dispatch] = useSyncState(state => state.taken[seat])
+
   return (
     <text
       value="Join"
@@ -122,6 +125,11 @@ export function Join() {
       padding={0.025}
       bgRadius={0.01}
       fontSize={0.05}
+      onClick={e => {
+        const { uid, name } = e.avatar
+        setUser({ seat, uid, name })
+        dispatch('join', seat, name, uid)
+      }}
     />
   )
 }
@@ -162,6 +170,8 @@ export function Seat({ seat }) {
   // player name
   // player time remaining
   const [player] = useSyncState(state => state.players[seat])
+  const name = player.name ? player.name : null
+  const time = player.time ? player.time : 0
 
   return (
     <>
@@ -174,9 +184,9 @@ export function Seat({ seat }) {
         padding={0.01}
         bgRadius={0.01}
       />
-      {player.name !== null && (
+      {name !== null && (
         <text
-          value={`Player: ${player.name}`}
+          value={`Player: ${name}`}
           position={[-0.15, 0.1, 0.0025]}
           color="white"
           fontSize={0.02}
@@ -185,9 +195,9 @@ export function Seat({ seat }) {
           bgRadius={0.01}
         />
       )}
-      {player.time !== 0 && (
+      {time !== 0 && (
         <text
-          value={`Time: ${player.time}`}
+          value={`Time: ${time}`}
           position={[0.15, 0.1, 0.0025]}
           color="white"
           fontSize={0.02}
@@ -231,13 +241,13 @@ export function Bet({ seat }) {
   if (!player) return null
   const [pot] = useSyncState(state => state.pot)
   const [turn] = useSyncState(state => state.turn)
-  const { uid, bet, money } = player
+  const { bet, money } = player
 
   const info = [
     { Label: 'Pot', Value: pot },
     { Label: 'Bet', Value: bet },
     { Label: 'Money', Value: money },
-    { Label: 'Turn', Value: `Player ${turn + 1}` },
+    { Label: 'Turn', Value: `Seat ${turn + 1}` },
   ]
 
   return (
@@ -260,31 +270,19 @@ export function Bet({ seat }) {
   )
 }
 
-// const player = {
-//   name: null,
-//   uid: null,
-//   seat: null,
-//   money: 0,
-//   bet: 0,
-//   time: 0,
-//   hand: [],
-// }
-
-// ! delete after testing
 const player = {
-  name: 'Philbert',
-  uid: 'test',
+  name: null,
+  uid: null,
   seat: null,
-  money: 420,
-  bet: 20,
-  time: 10,
+  money: 0,
+  bet: 0,
+  time: 0,
   hand: [],
 }
+
 const initialState = {
-  // taken: [false, false, false, false, false, false, false, false],
-  // ! delete after testing
-  taken: [true, true, true, true, true, true, true, true],
-  pot: 1000,
+  taken: [false, false, false, false, false, false, false, false],
+  pot: 0,
   turn: 0,
   players: [player, player, player, player, player, player, player, player],
   community: [],
@@ -293,6 +291,11 @@ const initialState = {
 export function getStore(state = initialState) {
   return {
     state,
-    actions: {},
+    actions: {
+      join(state, seat, name, uid) {
+        state.taken[seat] = true
+        state.players[seat] = { name, uid, seat, money: 1000, bet: 0, time: 0 }
+      },
+    },
   }
 }
