@@ -3,6 +3,13 @@ import { useSyncState, DEG2RAD, useWorld } from 'hyperfy'
 import { UI } from './ui'
 import { Table } from './table'
 
+// TODO:
+// * Add a timer to each turn
+// * If no winner, first in taken starts
+// * If winner, first in taken after winner starts
+// * create start state
+// * if next turn is start, move to next round // distribute pot
+
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
 export default function Poker() {
