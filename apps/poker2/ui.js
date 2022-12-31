@@ -2,13 +2,6 @@ import React from 'react'
 import { useSyncState, useWorld } from 'hyperfy'
 import { tiltBack } from '.'
 
-// TODO:
-// * Display the current bet
-// * Display the current pot
-// * Display the current round
-// * Display the current turn
-// * Display the current player
-
 export function UI({ seat, user, setUser }) {
   const [occupied] = useSyncState(state => state.taken[seat])
   const [player] = useSyncState(state => state.players[seat])

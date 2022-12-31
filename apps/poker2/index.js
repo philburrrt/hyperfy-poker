@@ -4,11 +4,8 @@ import { UI } from './ui'
 import { Table } from './table'
 
 // TODO:
-// * Add a timer to each turn
-// * If no winner, first in taken starts
-// * If winner, first in taken after winner starts
-// * create start state
-// * if next turn is start, move to next round // distribute pot
+// * Shuffle and deal cards ('preflop')
+// * Solve for winner and distribute pot ('showdown')
 
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
@@ -21,11 +18,6 @@ export default function Poker() {
     uid: null,
     name: null,
   })
-  // const [user, setUser] = useState({
-  //   seat: 0,
-  //   uid: 'player1',
-  //   name: 'Philbert',
-  // })
 
   return (
     <app>
@@ -39,7 +31,6 @@ export default function Poker() {
 }
 
 export function Test() {
-  const [state, dispatch] = useSyncState(state => state)
   const [time] = useSyncState(state => state.time)
   const [phase] = useSyncState(state => state.phase)
   const [turn] = useSyncState(state => state.turn)
@@ -193,6 +184,8 @@ export function ServerLogic() {
       console.log(
         `Round is intermission. Waiting 10 seconds before starting next round`
       )
+      // reset things that should change each round
+      dispatch('resetRound')
       setTimeout(() => {
         dispatch('setRound', getNextRound())
       }, 10000)
@@ -204,6 +197,7 @@ export function ServerLogic() {
     if (round === 'preflop') {
       const { first } = getNextTurn()
       dispatch('setTurn', first)
+      // * deal cards here
     } else if (round === 'flop' || round === 'turn' || round === 'river') {
       const { next } = getNextTurn()
       dispatch('setTurn', next)
@@ -219,6 +213,8 @@ export function ServerLogic() {
       setTimeout(() => {
         dispatch('setRound', getNextRound())
       }, 10000)
+
+      // * solve hands & give winner pot here
     }
   }, [round])
 
@@ -249,45 +245,21 @@ const player = {
   time: 0,
   hand: [],
 }
-// // ! Revert after testing
-// const player1 = {
-//   name: 'Philbert',
-//   uid: 'player1',
-//   seat: 0,
-//   action: null,
-//   money: 1000,
-//   bet: 0,
-//   time: 0,
-//   hand: [],
-// }
-
-// const player2 = {
-//   name: 'Player 2',
-//   uid: 'player2',
-//   seat: 1,
-//   action: null,
-//   money: 1000,
-//   time: 0,
-//   hand: [],
-// }
 
 const initialState = {
   phase: 'idle', // idle -> queued -> active -> end
   // when phase is active, intermission starts
   round: null, // intermission -> preflop -> flop -> turn -> river -> showdown
   winner: null,
-  // ! Revert after testing
   taken: [false, false, false, false, false, false, false, false],
-  // taken: [true, true, false, false, false, false, false, false],
   pot: 0,
   bet: 0,
   turn: null,
-  // ! Revert after testing
   players: [player, player, player, player, player, player, player, player],
-  // players: [player1, player2, player, player, player, player, player, player],
   community: [],
   time: 0,
   actions: 0,
+  deck: [],
 }
 
 export function getStore(state = initialState) {
@@ -316,6 +288,18 @@ export function getStore(state = initialState) {
           state.players[i].time = 0
         })
         console.log(`Round: ${round}`)
+      },
+      resetRound(state) {
+        state.pot = 0
+        state.deck = []
+        state.bet = 0
+        state.turn = null
+        state.community = []
+        state.players.forEach((player, i) => {
+          state.players[i].bet = 0
+          state.players[i].hand = []
+        })
+        state.actions = 0
       },
       bet(state, type, seat, amount) {
         if (amount > state.bet) {
