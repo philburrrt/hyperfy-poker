@@ -2,24 +2,20 @@ import React, { useState, useEffect, Fragment } from 'react'
 import { useSyncState, DEG2RAD, useWorld } from 'hyperfy'
 
 export default function Poker() {
-  // const [user, setUser] = useState({
-  //   seat: null,
-  //   uid: null,
-  //   name: null,
-  // })
-
-  // ! delete after testing
+  const world = useWorld()
   const [user, setUser] = useState({
-    seat: 0,
-    uid: 'test',
-    name: 'test',
+    seat: null,
+    uid: null,
+    name: null,
   })
 
   return (
     <app>
+      {world.isServer && <ServerLogic />}
       <model src="poker_table.glb" scale={0.45} position={[0, 0.95, 0]} />
       <Table />
       <Node user={user} setUser={setUser} />
+      <Test />
     </app>
   )
 }
@@ -29,6 +25,35 @@ export default function Poker() {
 // * Display each user's current bet on the table
 export function Table() {
   return <Community />
+}
+
+export function Test() {
+  const [state, dispatch] = useSyncState(state => state)
+  const [time] = useSyncState(state => state.time)
+  const [phase] = useSyncState(state => state.phase)
+
+  return (
+    <>
+      <text
+        value={`Time: ${time}`}
+        position={[0, 1.5, 0]}
+        color="white"
+        bgColor="black"
+        padding={0.025}
+        bgRadius={0.01}
+        fontSize={0.05}
+      />
+      <text
+        value={`Phase: ${phase}`}
+        position={[0, 1.45, 0]}
+        color="white"
+        bgColor="black"
+        padding={0.025}
+        bgRadius={0.01}
+        fontSize={0.05}
+      />
+    </>
+  )
 }
 
 export function Community() {
@@ -100,7 +125,7 @@ export function UI({ seat, user, setUser }) {
       <group rotation={tiltBack}>
         <Seat seat={seat} />
         {occupied && user.uid === player.uid && <Hand />}
-        {!occupied && <Join seat={seat} user={user} setUser={setUser} />}
+        {!occupied && <Join seat={seat} setUser={setUser} />}
         {occupied && (
           <>
             <Actions />
@@ -112,7 +137,7 @@ export function UI({ seat, user, setUser }) {
   )
 }
 
-export function Join({ seat, user, setUser }) {
+export function Join({ seat, setUser }) {
   const world = useWorld()
   const [taken, dispatch] = useSyncState(state => state.taken[seat])
 
@@ -270,10 +295,71 @@ export function Bet({ seat }) {
   )
 }
 
+const QUEUE_TIME = 10
+const ENDING_TIME = 10
+const TURN_TIME = 10
+export function ServerLogic() {
+  const world = useWorld()
+  const [state, dispatch] = useSyncState(state => state)
+  const { phase, turn, players, taken } = state
+
+  useEffect(() => {
+    if (phase === 'idle') {
+      const taken = state.taken.filter(Boolean)
+      if (taken.length > 1) {
+        dispatch('setPhase', 'queued', world.getTime())
+      }
+    }
+    if (phase === 'queued') {
+      return world.onUpdate(() => {
+        const now = world.getTime()
+        const elapsed = now - state.time
+        if (elapsed > QUEUE_TIME) {
+          dispatch('setPhase', 'active')
+        }
+      })
+    }
+    if (phase === 'queued' || phase === 'active') {
+      const taken = state.taken.filter(Boolean)
+      if (taken.length === 1) {
+        dispatch('setPhase', 'end', world.getTime())
+      }
+    }
+    if (phase === 'ending') {
+      return world.onUpdate(() => {
+        const now = world.getTime()
+        const elapsed = now - state.time
+        if (elapsed > ENDING_TIME) {
+          dispatch('setPhase', 'idle')
+          dispatch('reset')
+        }
+      })
+    }
+  }, [phase, taken])
+
+  // max time limit for turn
+  useEffect(() => {
+    if (phase === 'active') {
+      const turn = state.turn
+      return world.onUpdate(() => {
+        const now = world.getTime()
+        const elapsed = now - state.time
+        if (elapsed > TURN_TIME) {
+          dispatch('setTurn', (turn + 1) % 8)
+          dispatch('fold', turn)
+        }
+      })
+    }
+  }, [turn])
+
+  return null
+}
+
 const player = {
   name: null,
   uid: null,
   seat: null,
+  action: null,
   money: 0,
   bet: 0,
   time: 0,
@@ -281,11 +367,13 @@ const player = {
 }
 
 const initialState = {
+  phase: 'idle', // idle -> queued -> active -> end
   taken: [false, false, false, false, false, false, false, false],
   pot: 0,
   turn: 0,
   players: [player, player, player, player, player, player, player, player],
   community: [],
+  time: 0,
 }
 
 export function getStore(state = initialState) {
@@ -295,6 +383,40 @@ export function getStore(state = initialState) {
       join(state, seat, name, uid) {
         state.taken[seat] = true
         state.players[seat] = { name, uid, seat, money: 1000, bet: 0, time: 0 }
+      },
+      leave(state, seat) {
+        state.taken[seat] = false
+        state.players[seat] = player
+      },
+      setPhase(state, phase, time = 0) {
+        state.phase = phase
+        state.time = time
+      },
+      setTurn(state, turn) {
+        state.turn = turn
+      },
+      bet(state, seat, amount) {
+        state.players[seat].bet += amount
+        state.players[seat].money -= amount
+        state.pot += amount
+        state.turn = (seat + 1) % 8
+      },
+      fold(state, seat) {
+        state.players[seat].bet = 0
+        state.players[seat].hand = []
+        state.turn = (seat + 1) % 8
+      },
+      win(state, seat, amount) {
+        state.players[seat].money += amount
+        state.phase = 'end'
+      },
+      reset(state) {
+        state.pot = 0
+        state.turn = 0
+        state.community = []
+        state.players.forEach(player => {
+          player.hand = []
+        })
       },
     },
   }
