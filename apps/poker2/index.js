@@ -2,10 +2,17 @@ import React, { useState, useEffect, Fragment } from 'react'
 import { useSyncState, DEG2RAD } from 'hyperfy'
 
 export default function Poker() {
+  // const [user, setUser] = useState({
+  //   seat: null,
+  //   uid: null,
+  //   name: null,
+  // })
+
+  // ! delete after testing
   const [user, setUser] = useState({
-    seat: null,
-    uid: null,
-    name: null,
+    seat: 0,
+    uid: 'test',
+    name: 'test',
   })
 
   return (
@@ -91,16 +98,15 @@ export function UI({ seat, user }) {
   return (
     <>
       <group rotation={tiltBack}>
-        {occupied && user.uid === player.uid && <Hand />}
         <Seat seat={seat} />
+        {occupied && user.uid === player.uid && <Hand />}
         {!occupied && <Join />}
         {occupied && (
           <>
             <Actions />
-            <Bet />
+            <Bet seat={seat} />
           </>
         )}
-        {occupied && player}
       </group>
     </>
   )
@@ -135,7 +141,7 @@ export function Hand() {
   return (
     <>
       {fakeHands.map((hand, i) => (
-        <group key={i} position={[-0.15, 0, 0]}>
+        <group key={i} position={[-0.175, -0.025, 0]}>
           {hand.map((card, i) => (
             <image
               key={i}
@@ -156,43 +162,129 @@ export function Seat({ seat }) {
   // player name
   // player time remaining
   const [player] = useSyncState(state => state.players[seat])
-  return (
-    <text
-      value={`Seat: ${seat + 1}`}
-      position={[0, 0.035, 0.01]}
-      color="white"
-    />
-  )
 
-  return <></>
+  return (
+    <>
+      <text
+        value={`Seat: ${seat + 1}`}
+        position={[0, 0.1, 0.0025]}
+        color="white"
+        fontSize={0.02}
+        bgColor="black"
+        padding={0.01}
+        bgRadius={0.01}
+      />
+      {player.name !== null && (
+        <text
+          value={`Player: ${player.name}`}
+          position={[-0.15, 0.1, 0.0025]}
+          color="white"
+          fontSize={0.02}
+          bgColor="black"
+          padding={0.01}
+          bgRadius={0.01}
+        />
+      )}
+      {player.time !== 0 && (
+        <text
+          value={`Time: ${player.time}`}
+          position={[0.15, 0.1, 0.0025]}
+          color="white"
+          fontSize={0.02}
+          bgColor="black"
+          padding={0.01}
+          bgRadius={0.01}
+        />
+      )}
+    </>
+  )
 }
 
 export function Actions() {
   // fold, call or raise
-  // action for last round
-  return <></>
+  const buttons = ['Fold', 'Call', 'Raise']
+  return (
+    <>
+      <group position={[0, -0.05, 0.01]}>
+        {buttons.map((button, i) => (
+          <text
+            key={i}
+            value={button}
+            position={[0, 0.045 * i, 0]}
+            color="white"
+            bgColor="black"
+            fontSize={0.02}
+            padding={0.01}
+            bgRadius={0.01}
+          />
+        ))}
+      </group>
+    </>
+  )
 }
 
-export function Bet() {
+export function Bet({ seat }) {
   // current pot
   // player's bet
   // player's money
-  return <></>
+  const [player] = useSyncState(state => state.players[seat])
+  if (!player) return null
+  const [pot] = useSyncState(state => state.pot)
+  const [turn] = useSyncState(state => state.turn)
+  const { uid, bet, money } = player
+
+  const info = [
+    { Label: 'Pot', Value: pot },
+    { Label: 'Bet', Value: bet },
+    { Label: 'Money', Value: money },
+    { Label: 'Turn', Value: `Player ${turn + 1}` },
+  ]
+
+  return (
+    <>
+      <group position={[0.15, -0.08, 0]}>
+        {info.map((item, i) => (
+          <text
+            key={i}
+            value={`${item.Label}: ${item.Value}`}
+            position={[0, 0.045 * i, 0]}
+            color="white"
+            bgColor="black"
+            fontSize={0.02}
+            padding={0.01}
+            bgRadius={0.01}
+          />
+        ))}
+      </group>
+    </>
+  )
 }
 
+// const player = {
+//   name: null,
+//   uid: null,
+//   seat: null,
+//   money: 0,
+//   bet: 0,
+//   time: 0,
+//   hand: [],
+// }
+
+// ! delete after testing
 const player = {
-  name: null,
-  uid: null,
+  name: 'Philbert',
+  uid: 'test',
   seat: null,
-  money: 0,
-  bet: 0,
-  time: 0,
+  money: 420,
+  bet: 20,
+  time: 10,
   hand: [],
 }
 const initialState = {
-  taken: [false, false, false, false, false, false, false, false],
-  pot: 0,
-  round: 0,
+  // taken: [false, false, false, false, false, false, false, false],
+  // ! delete after testing
+  taken: [true, true, true, true, true, true, true, true],
+  pot: 1000,
   turn: 0,
   players: [player, player, player, player, player, player, player, player],
   community: [],
