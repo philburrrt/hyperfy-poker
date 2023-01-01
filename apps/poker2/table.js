@@ -9,13 +9,14 @@ export function Table() {
 }
 
 export function Community() {
-  const cards = ['3h', '4h', '5h', '6h', '7h']
+  const [community] = useSyncState(state => state.community)
   const groupPos = [-0.075, 1.25, -0.01]
+  if (community.length === 0) return null
   return (
     <>
       <billboard axis="y">
         <group position={groupPos} rotation={[DEG2RAD * -45, DEG2RAD * 1, 0]}>
-          {cards.map((card, i) => (
+          {community.map((card, i) => (
             <image
               key={i}
               src={`cards/${card}.png`}

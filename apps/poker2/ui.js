@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useSyncState, useWorld } from 'hyperfy'
 import { tiltBack } from '.'
 
@@ -10,7 +10,8 @@ export function UI({ seat, user, setUser }) {
     <>
       <group rotation={tiltBack}>
         <Seat seat={seat} />
-        {occupied && user.uid === player.uid && <Hand />}
+        {/* {occupied && user.uid === player.uid && <Hand seat={seat} />} */}
+        {occupied && <Hand seat={seat} />}
         {!occupied && <Join seat={seat} setUser={setUser} />}
         {occupied && (
           <>
@@ -45,22 +46,16 @@ export function Join({ seat, setUser }) {
   )
 }
 
-export function Hand() {
-  const fakeHands = [
-    ['3h', '4h'],
-    ['5h', '6h'],
-    ['7h', '8h'],
-    ['9h', '10h'],
-    ['Jh', 'Qh'],
-    ['Kh', 'Ah'],
-    ['2h', '2h'],
-    ['3h', '3h'],
-  ]
+export function Hand({ seat }) {
+  const [hand] = useSyncState(state => state.players[seat].hand)
+  useEffect(() => {
+    console.log('hand', hand, seat)
+  }, [hand])
 
   return (
     <>
-      {fakeHands.map((hand, i) => (
-        <group key={i} position={[-0.175, -0.025, 0]}>
+      {hand && (
+        <group position={[-0.175, -0.025, 0]}>
           {hand.map((card, i) => (
             <image
               key={i}
@@ -70,7 +65,7 @@ export function Hand() {
             />
           ))}
         </group>
-      ))}
+      )}
     </>
   )
 }

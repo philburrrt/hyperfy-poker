@@ -1,5 +1,5 @@
-import React, { useState, useEffect, Fragment } from 'react'
-import { useSyncState, DEG2RAD, useWorld } from 'hyperfy'
+import React, { useState, useEffect } from 'react'
+import { useSyncState, DEG2RAD, useWorld, randomInt } from 'hyperfy'
 import { UI } from './ui'
 import { Table } from './table'
 
@@ -9,10 +9,14 @@ import { Table } from './table'
 
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
+const cards = {
+  suits: ['h', 's', 'c', 'd'],
+  cards: ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'],
+}
+
 export default function Poker() {
   const world = useWorld()
 
-  // ! Revert after testing
   const [user, setUser] = useState({
     seat: null,
     uid: null,
@@ -135,6 +139,17 @@ export function ServerLogic() {
     return { first, next }
   }
 
+  function shuffle() {
+    const deck = []
+    cards.suits.forEach(suit => {
+      cards.cards.forEach(card => {
+        deck.push(`${card}${suit}`)
+      })
+    })
+    deck.sort(() => randomInt(0, 1) - 0.5)
+    return deck
+  }
+
   useEffect(() => {
     // if idle and 2 players join, queue game
     if (phase === 'idle') {
@@ -179,34 +194,29 @@ export function ServerLogic() {
   }, [phase, taken])
 
   useEffect(() => {
-    // if intermission, wait 10 seconds, then start next round
     if (round === 'intermission') {
       console.log(
         `Round is intermission. Waiting 10 seconds before starting next round`
       )
-      // reset things that should change each round
-      dispatch('resetRound')
+      dispatch('newRound')
       setTimeout(() => {
         dispatch('setRound', getNextRound())
       }, 10000)
     }
 
-    // if preflop, set turn to first in taken || first in taken after winner
-    // if flop, turn, or river, set turn to next in taken
-    // if showdown, set turn to null
     if (round === 'preflop') {
       const { first } = getNextTurn()
       dispatch('setTurn', first)
-      // * deal cards here
-    } else if (round === 'flop' || round === 'turn' || round === 'river') {
-      const { next } = getNextTurn()
-      dispatch('setTurn', next)
-    } else if (round === 'showdown') {
-      dispatch('setTurn', null)
+      dispatch('deal', shuffle())
     }
 
-    // if showdown, wait 10 seconds, then start next round (intermission)
+    if (round === 'flop' || round === 'turn' || round === 'river') {
+      const { next } = getNextTurn()
+      dispatch('setTurn', next)
+    }
+
     if (round === 'showdown') {
+      dispatch('setTurn', null)
       console.log(
         `Round is showdown. Waiting 10 seconds before starting next round`
       )
@@ -218,16 +228,14 @@ export function ServerLogic() {
     }
   }, [round])
 
+  // determines which player's turn it is after each action taken
   useEffect(() => {
     if (actions == 0) return
-    // if getNextTurn().next is null, start next round
     const { next } = getNextTurn()
     console.log(`turn just taken, next is ${next}`)
     if (next === null) {
       dispatch('setRound', getNextRound())
-    }
-    // otherwise, set turn to next
-    else {
+    } else {
       dispatch('setTurn', next)
     }
   }, [actions])
@@ -289,7 +297,7 @@ export function getStore(state = initialState) {
         })
         console.log(`Round: ${round}`)
       },
-      resetRound(state) {
+      newRound(state) {
         state.pot = 0
         state.deck = []
         state.bet = 0
@@ -300,6 +308,14 @@ export function getStore(state = initialState) {
           state.players[i].hand = []
         })
         state.actions = 0
+      },
+      deal(state, deck) {
+        state.deck = deck
+        state.players.forEach((player, i) => {
+          state.players[i].hand = [deck.pop(), deck.pop()]
+        })
+        state.community = [deck.pop(), deck.pop(), deck.pop()]
+        console.log('Dealt cards')
       },
       bet(state, type, seat, amount) {
         if (amount > state.bet) {
