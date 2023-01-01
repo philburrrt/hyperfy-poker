@@ -10,6 +10,7 @@ export function UI({ seat, user, setUser }) {
     <>
       <group rotation={tiltBack}>
         <Seat seat={seat} />
+        <Exit seat={seat} />
         {occupied && <Hand seat={seat} />}
         {!occupied && <Join seat={seat} setUser={setUser} />}
         {occupied && (
@@ -26,6 +27,7 @@ export function UI({ seat, user, setUser }) {
 export function Join({ seat, setUser }) {
   const world = useWorld()
   const [round, dispatch] = useSyncState(state => state.taken[seat])
+  const [phase] = useSyncState(state => state.phase)
 
   return (
     <text
@@ -37,9 +39,31 @@ export function Join({ seat, setUser }) {
       bgRadius={0.01}
       fontSize={0.05}
       onClick={e => {
-        const { uid, name } = e.avatar
-        setUser({ seat, uid, name })
-        dispatch('join', seat, name, uid)
+        if (phase === 'idle' || round === 'intermission') {
+          const { uid, name } = e.avatar
+          setUser({ seat, uid, name })
+          dispatch('join', seat, name, uid)
+        }
+      }}
+    />
+  )
+}
+
+export function Exit({ seat }) {
+  const [player, dispatch] = useSyncState(state => state.players[seat])
+
+  return (
+    <text
+      value="Exit"
+      position={[0, -0.1, 0.01]}
+      color="white"
+      bgColor="black"
+      padding={0.015}
+      bgRadius={0.015}
+      fontSize={0.015}
+      onClick={() => {
+        if (player?.seat !== seat) return console.log('not your seat')
+        dispatch('exit', seat)
       }}
     />
   )
@@ -126,6 +150,7 @@ export function Actions({ seat, user }) {
             onClick={() => {
               if (turn === null) return console.log('not active')
               if (seat != turn) return console.log('not your turn')
+              if (seat != user.seat) return console.log('not your seat')
               if (button.action === 'fold') dispatch('fold', seat)
               let amount
               if (bet === 0) {

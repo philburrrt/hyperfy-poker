@@ -5,8 +5,15 @@ import { Table } from './table'
 import { Hand } from './pokersolver'
 
 // TODO:
-// * Shuffle and deal cards ('preflop')
-// * Solve for winner and distribute pot ('showdown')
+// * Test with more players
+// * Test with flops
+// * Annotate
+// * Create a UI for the back of each player's pannel
+// - Player number
+// - If mid game, it displays their choice of action
+// - if in showdown, it displays their hand
+// * Ties should show which players are tied
+// * Fix player vs seat inconsistency
 
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
@@ -30,39 +37,8 @@ export default function Poker() {
       <model src="poker_table.glb" scale={0.45} position={[0, 0.95, 0]} />
       <Table />
       <Node user={user} setUser={setUser} />
-      <Test />
+      <Status />
     </app>
-  )
-}
-
-export function Test() {
-  const [time] = useSyncState(state => state.time)
-  const [phase] = useSyncState(state => state.phase)
-  const [turn] = useSyncState(state => state.turn)
-  const [winner] = useSyncState(state => state.winner)
-
-  const info = [
-    { label: 'time', value: time },
-    { label: 'phase', value: phase },
-    { label: 'turn', value: turn },
-    { label: 'winner', value: winner },
-  ]
-
-  return (
-    <>
-      {info.map(({ label, value }, i) => (
-        <text
-          key={i}
-          value={`${label}: ${value}`}
-          position={[0, 1.75 - 0.05 * i, 0]}
-          color="white"
-          bgColor="black"
-          padding={0.025}
-          bgRadius={0.01}
-          fontSize={0.05}
-        />
-      ))}
-    </>
   )
 }
 
@@ -76,6 +52,37 @@ const positions = [
   [-1.1, 1.25, 0],
   [-0.8, 1.25, 0.8],
 ]
+
+export function Status() {
+  const [status] = useSyncState(state => state.status)
+  const [winner] = useSyncState(state => state.winner)
+
+  const info = [
+    { lable: 'Status', value: status },
+    { lable: 'Winner', value: winner },
+  ]
+
+  return (
+    <>
+      {info.map((info, i) => (
+        <>
+          {info.value && (
+            <text
+              key={i}
+              value={info.value}
+              position={[0, 1.7 + i * 0.1, 0]}
+              color="white"
+              bgColor="black"
+              padding={0.025}
+              bgRadius={0.01}
+              fontSize={0.05}
+            />
+          )}
+        </>
+      ))}
+    </>
+  )
+}
 
 export function Node({ user, setUser }) {
   return (
@@ -97,25 +104,18 @@ export function Node({ user, setUser }) {
   )
 }
 
-/*
-  - idle
-  - 2 players join
-  - queued
-  - active
-  - intermission -> preflop -> flop -> turn -> river -> showdown -> intermission
-  - during intermission, player hands, the bet amount, and the pot amount are reset
-  - turn = first in taken || first in taken after winner
-  - players can join during intermission
-  - if only 1 player left, game winds down (all variables reset)
-*/
-
+// todo: add
 const QUEUE_TIME = 2.5
-const ENDING_TIME = 10
 export function ServerLogic() {
   const world = useWorld()
   const [state, dispatch] = useSyncState(state => state)
   const { phase, pot, players, taken, round, actions, community } = state
+  const [order, setOrder] = useState({
+    firstMover: null,
+    lastMover: null,
+  })
 
+  // * ------------------ UTILS ------------------ *
   function getNextRound() {
     if (round === 'intermission') return 'preflop'
     if (round === 'preflop') return 'flop'
@@ -139,6 +139,14 @@ export function ServerLogic() {
     return { first, next }
   }
 
+  function getActiveHands() {
+    return players
+      .filter(player => player.hand.length > 0)
+      .map(player => {
+        return { seat: player.seat, hand: player.hand }
+      })
+  }
+
   function shuffle() {
     const deck = []
     cards.suits.forEach(suit => {
@@ -150,12 +158,12 @@ export function ServerLogic() {
     return deck
   }
 
-  // math.floor() manually
   function floor(num) {
     const floor = num.toString().split('.')[0]
     return parseInt(floor)
   }
 
+  // * ------------------ PHASE SYSTEM ------------------ *
   useEffect(() => {
     // if idle and 2 players join, queue game
     if (phase === 'idle') {
@@ -183,58 +191,69 @@ export function ServerLogic() {
     }
     if (phase === 'active') {
       if (!round) {
-        console.log('New game. Setting round to intermission')
         dispatch('setRound', 'intermission')
       }
     }
     // wait ENDING_TIME seconds, then reset game
     if (phase === 'end') {
-      return world.onUpdate(() => {
-        const now = world.getTime()
-        const elapsed = now - state.time
-        if (elapsed > ENDING_TIME) {
-          dispatch('setPhase', 'idle')
-        }
-      })
+      setTimeout(() => {
+        dispatch('reset')
+      }, 1000)
     }
   }, [phase, taken])
 
+  // * ------------------ Intermission ------------------ *
   useEffect(() => {
     if (round === 'intermission') {
+      dispatch('setStatus', 'New round starting...')
+      const { firstMover } = order
       dispatch('newRound')
       setTimeout(() => {
         dispatch('setRound', getNextRound())
         const { first } = getNextTurn()
-        dispatch('setTurn', first)
-      }, 10000)
+        dispatch('setTurn', firstMover ? firstMover : first)
+        setOrder({
+          firstMover: firstMover ? firstMover : first,
+          lastMover: firstMover ? firstMover : first,
+        })
+        dispatch('setStatus', null)
+      }, 5000)
     }
 
     if (round === 'preflop') {
       dispatch('deal', shuffle())
     }
 
+    // * ------------------ FLOP, TURN, RIVER ------------------ *
     if (round === 'flop' || round === 'turn' || round === 'river') {
-      const { next } = getNextTurn()
-      dispatch('setTurn', next)
+      const { lastMover, firstMover } = order
+      const nextPlayer = players.find(player => {
+        return player.seat > lastMover && player.hand.length > 0
+      })
+      if (!nextPlayer) {
+        dispatch('setTurn', firstMover)
+        setOrder({
+          firstMover: firstMover,
+          lastMover: firstMover,
+        })
+        return
+      }
+      dispatch('setTurn', nextPlayer.seat)
+      setOrder({
+        firstMover: order.firstMover,
+        lastMover: nextPlayer.seat,
+      })
     }
 
+    // * ------------------ SHOWDOWN ------------------ *
     if (round === 'showdown') {
+      dispatch('setStatus', 'Calculated winner... Distributing pot...')
       dispatch('setTurn', null)
       setTimeout(() => {
         dispatch('setRound', getNextRound())
       }, 10000)
 
-      // * solve hands & give winner pot here
-      // i need the index of all players whos hand is not null || []
-      // make a new array of { seat, hand }
-      // give the solver an array of all players hands
-      // get the winner
-
-      const activeHands = players
-        .filter(player => player.hand.length > 0)
-        .map(player => {
-          return { seat: player.seat, hand: player.hand }
-        })
+      const activeHands = getActiveHands()
 
       const results = activeHands.map(hand => {
         return Hand.solve([...hand.hand, ...community])
@@ -242,34 +261,25 @@ export function ServerLogic() {
       const winner = Hand.winners(results)
       let winners = []
 
-      console.log(
-        'winning info',
-        results[0].name,
-        results[1].name,
-        winner[0].name
-      )
-
       for (let i = 0; i < results.length; i++) {
         if (results[i].name === winner[0].name) {
           winners.push(activeHands[i].seat)
         }
       }
-
-      console.log('winners', winners)
       const rewardPerWinner = floor(pot / winners.length)
       winners.forEach(seat => {
         dispatch('reward', seat, players[seat].money + rewardPerWinner)
       })
-      if (winners.length === 1) dispatch('setWinner', winners[0])
-      console.log(`each winner gets ${rewardPerWinner}`)
+      if (winners.length > 1) return dispatch('setStatus', 'Tie!')
+      dispatch('setStatus', `Winner: Player ${winners[0] + 1}`)
     }
   }, [round])
 
+  // * ------------------ PER TURN ------------------ *
   // determines which player's turn it is after each action taken
   useEffect(() => {
     if (actions == 0) return
     const { next } = getNextTurn()
-    console.log(`turn just taken, next is ${next}`)
     if (next === null) {
       dispatch('setRound', getNextRound())
     } else {
@@ -305,6 +315,7 @@ const initialState = {
   time: 0,
   actions: 0,
   deck: [],
+  status: null,
 }
 
 export function getStore(state = initialState) {
@@ -316,9 +327,10 @@ export function getStore(state = initialState) {
         state.players[seat] = { name, uid, seat, money: 1000, bet: 0, time: 0 }
         console.log(`Seat ${seat + 1} taken by ${name} (${uid})`)
       },
-      leave(state, seat) {
+      exit(state, seat) {
         state.taken[seat] = false
         state.players[seat] = player
+        console.log(`Seat ${seat + 1} is now empty`)
       },
       setPhase(state, phase, time = 0) {
         state.phase = phase
@@ -333,6 +345,13 @@ export function getStore(state = initialState) {
           state.players[i].time = 0
         })
         console.log(`Round: ${round}`)
+      },
+      setStatus(state, status) {
+        state.status = status
+        console.log(`Status: ${status}`)
+      },
+      reset(state) {
+        state = initialState
       },
       newRound(state) {
         state.pot = 0
