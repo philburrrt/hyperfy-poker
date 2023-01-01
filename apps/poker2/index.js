@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useSyncState, DEG2RAD, useWorld, randomInt } from 'hyperfy'
 import { UI } from './ui'
 import { Table } from './table'
+import { Hand } from './pokersolver'
 
 // TODO:
 // * Shuffle and deal cards ('preflop')
@@ -38,11 +39,13 @@ export function Test() {
   const [time] = useSyncState(state => state.time)
   const [phase] = useSyncState(state => state.phase)
   const [turn] = useSyncState(state => state.turn)
+  const [winner] = useSyncState(state => state.winner)
 
   const info = [
     { label: 'time', value: time },
     { label: 'phase', value: phase },
     { label: 'turn', value: turn },
+    { label: 'winner', value: winner },
   ]
 
   return (
@@ -111,7 +114,7 @@ const ENDING_TIME = 10
 export function ServerLogic() {
   const world = useWorld()
   const [state, dispatch] = useSyncState(state => state)
-  const { phase, turn, players, taken, round, actions } = state
+  const { phase, pot, players, taken, round, actions, community } = state
 
   function getNextRound() {
     if (round === 'intermission') return 'preflop'
@@ -126,13 +129,10 @@ export function ServerLogic() {
     const takenSeats = taken.map((taken, i) => {
       if (taken) return i
     })
-    console.log('takenSeats', takenSeats)
     const first = state.winner || takenSeats[0]
-    console.log('first', first)
     let next
     try {
       next = takenSeats.find(seat => !state.players[seat].action)
-      console.log('next', next)
     } catch (e) {
       next = null
     }
@@ -148,6 +148,11 @@ export function ServerLogic() {
     })
     deck.sort(() => randomInt(0, 1) - 0.5)
     return deck
+  }
+
+  // math.floor() manually
+  function floor(num) {
+    return num.toString().split('.')[0]
   }
 
   useEffect(() => {
@@ -195,9 +200,6 @@ export function ServerLogic() {
 
   useEffect(() => {
     if (round === 'intermission') {
-      console.log(
-        `Round is intermission. Waiting 10 seconds before starting next round`
-      )
       dispatch('newRound')
       setTimeout(() => {
         dispatch('setRound', getNextRound())
@@ -217,14 +219,48 @@ export function ServerLogic() {
 
     if (round === 'showdown') {
       dispatch('setTurn', null)
-      console.log(
-        `Round is showdown. Waiting 10 seconds before starting next round`
-      )
       setTimeout(() => {
         dispatch('setRound', getNextRound())
       }, 10000)
 
       // * solve hands & give winner pot here
+      // i need the index of all players whos hand is not null || []
+      // make a new array of { seat, hand }
+      // give the solver an array of all players hands
+      // get the winner
+
+      const activeHands = players
+        .filter(player => player.hand.length > 0)
+        .map(player => {
+          return { seat: player.seat, hand: player.hand }
+        })
+
+      const results = activeHands.map(hand => {
+        return Hand.solve([...hand.hand, ...community])
+      })
+      const winner = Hand.winners(results)
+      let winners = []
+
+      console.log(
+        'winning info',
+        results[0].name,
+        results[1].name,
+        winner[0].name
+      )
+
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].name === winner[0].name) {
+          winners.push(activeHands[i].seat)
+        }
+      }
+
+      console.log('winners', winners)
+      const rewardPerWinner = parseInt(floor(pot / winners.length))
+      winners.forEach(seat => {
+        dispatch('reward', seat, players[seat].money + rewardPerWinner)
+      })
+      if (winners.length === 1) dispatch('setWinner', winners[0])
+      console.log(`each winner gets ${rewardPerWinner}`)
     }
   }, [round])
 
@@ -309,10 +345,16 @@ export function getStore(state = initialState) {
         })
         state.actions = 0
       },
+      reward(state, seat, amount) {
+        state.players[seat].money = amount
+      },
+      setWinner(state, seat) {
+        state.winner = seat
+      },
       deal(state, deck) {
         state.deck = deck
         state.players.forEach((player, i) => {
-          state.players[i].hand = [deck.pop(), deck.pop()]
+          if (player.name) state.players[i].hand = [deck.pop(), deck.pop()]
         })
         state.community = [deck.pop(), deck.pop(), deck.pop()]
         console.log('Dealt cards')
