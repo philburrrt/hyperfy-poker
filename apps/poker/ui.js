@@ -1,141 +1,186 @@
 import React, { useEffect } from 'react'
-import { useSyncState, DEG2RAD, useServer } from 'hyperfy'
-import { positions } from './index'
+import { useSyncState, useWorld } from 'hyperfy'
+import { tiltBack } from '.'
 
-export function UI({ user, setUser }) {
-  const [turn] = useSyncState(state => state.turn)
-  const [seats] = useSyncState(state => state.seats)
+export function UI({ seat, user, setUser }) {
+  const [occupied] = useSyncState(state => state.taken[seat])
+  const [player] = useSyncState(state => state.players[seat])
 
   return (
     <>
-      {positions.map((pos, idx) => {
-        if (seats[idx].uid && seats[idx].uid !== user.uid) return null
-        return (
-          <group key={idx} position={pos} rotation={[0, DEG2RAD * 45 * idx, 0]}>
-            {seats[idx].uid && <Exit idx={idx} setUser={setUser} />}
-            {turn.round === 0 && seats[idx].uid && !seats[idx].ready && (
-              <Ready idx={idx} />
-            )}
-            {turn.round > 0 && !seats[idx].ready && seats[idx].active && (
-              <Options idx={idx} />
-            )}
-            {seats[idx].hand && seats[idx].hand.length > 0 && (
-              <Hands idx={idx} />
-            )}
-          </group>
-        )
-      })}
+      <group rotation={tiltBack}>
+        <Seat seat={seat} />
+        {occupied && <Hand seat={seat} />}
+        {!occupied && <Join seat={seat} setUser={setUser} />}
+        {occupied && (
+          <>
+            <Actions seat={seat} user={user} />
+            <PoolInfo seat={seat} />
+          </>
+        )}
+      </group>
     </>
   )
 }
 
-export function Options({ idx }) {
-  const [turn, dispatch] = useSyncState(state => state.turn)
-
-  return (
-    <>
-      <text
-        value={turn.round < 5 ? 'Call' : 'Done'}
-        position={[0, -0.1, 0]}
-        onClick={() => {
-          dispatch('ready', { idx })
-        }}
-        bgColor={'black'}
-        color={'white'}
-        padding={0.02}
-        bgRadius={0.02}
-      />
-      {turn.round < 5 && (
-        <text
-          value="Fold"
-          position={[0, -0.2, 0]}
-          onClick={() => dispatch('fold', { idx })}
-          bgColor={'black'}
-          color={'white'}
-          padding={0.02}
-          bgRadius={0.02}
-        />
-      )}
-    </>
-  )
-}
-
-export function Ready({ idx }) {
-  const [turn, dispatch] = useSyncState(state => state.seats)
+export function Join({ seat, setUser }) {
+  const world = useWorld()
+  const [round, dispatch] = useSyncState(state => state.taken[seat])
 
   return (
     <text
-      value="Ready"
-      position={[0, -0.2, 0]}
-      onClick={() => {
-        dispatch('ready', { idx })
+      value="Join"
+      position={[0, 0.035, 0.01]}
+      color="white"
+      bgColor="black"
+      padding={0.025}
+      bgRadius={0.01}
+      fontSize={0.05}
+      onClick={e => {
+        const { uid, name } = e.avatar
+        setUser({ seat, uid, name })
+        dispatch('join', seat, name, uid)
       }}
-      bgColor={'black'}
-      color={'white'}
-      padding={0.02}
-      bgRadius={0.02}
     />
   )
 }
 
-export function Exit({ idx, setUser }) {
-  const [seats, dispatch] = useSyncState(state => state.seats)
+export function Hand({ seat }) {
+  const [hand] = useSyncState(state => state.players[seat].hand)
+  useEffect(() => {
+    console.log('hand', hand, seat)
+  }, [hand])
+
+  return (
+    <>
+      {hand && (
+        <group position={[-0.175, -0.025, 0]}>
+          {hand.map((card, i) => (
+            <image
+              key={i}
+              src={`cards/${card}.png`}
+              width={0.1}
+              position={[0.05 * i, 0, 0.0025 * i]}
+            />
+          ))}
+        </group>
+      )}
+    </>
+  )
+}
+
+export function Seat({ seat }) {
+  // all public info
+  const [player] = useSyncState(state => state.players[seat])
+  const name = player.name ? player.name : null
 
   return (
     <>
       <text
-        value="Exit"
-        position={[0, -0.3, 0]}
-        onClick={() => {
-          dispatch('exit', { idx })
-          setUser({ seat: null, uid: null, name: null })
-        }}
-        bgColor={'black'}
-        color={'white'}
-        padding={0.02}
-        bgRadius={0.02}
+        value={`Seat: ${seat + 1}`}
+        position={[0, 0.1, 0.0025]}
+        color="white"
+        fontSize={0.02}
+        bgColor="black"
+        padding={0.01}
+        bgRadius={0.01}
       />
-      {seats[idx].ready && (
+      {name !== null && (
         <text
-          value="...Waiting"
-          position={[0, -0.2, 0]}
-          bgColor={'black'}
-          color={'white'}
-          padding={0.02}
-          bgRadius={0.02}
+          value={`Player: ${name}`}
+          position={[-0.15, 0.1, 0.0025]}
+          color="white"
+          fontSize={0.02}
+          bgColor="black"
+          padding={0.01}
+          bgRadius={0.01}
         />
       )}
     </>
   )
 }
 
-export function Hands({ idx }) {
-  const [seats] = useSyncState(state => state.seats)
-  const [turn] = useSyncState(state => state.turn)
-  const hand = seats[idx].hand
-  const community = turn.community
+export function Actions({ seat, user }) {
+  const [bet, dispatch] = useSyncState(state => state.bet)
+  const [turn] = useSyncState(state => state?.turn)
+  // fold, call or raise
+  const buttons = [
+    { value: 'Fold', action: 'fold' },
+    { value: 'Call', action: 'call' },
+    { value: 'Raise', action: 'raise' },
+  ]
+
   return (
     <>
-      {hand.map((card, idx) => (
-        <image
-          key={idx}
-          src={`cards/${card}.png`}
-          scale={0.15}
-          frameWidth={0.01}
-          frameColor={'blue'}
-          position={[0.03 * (idx - 2.5), 0, idx * 0.005]}
-        />
-      ))}
-      {community.map((card, idx) => (
-        <image
-          key={idx}
-          src={`cards/${card}.png`}
-          scale={0.15}
-          frameWidth={0.01}
-          frameColor={'blue'}
-          position={[0.03 * (idx - 0.5), 0, (idx + 2) * 0.005]}
-        />
-      ))}
+      <group key={seat} position={[0, -0.05, 0.01]}>
+        {buttons.map((button, i) => (
+          <text
+            key={i}
+            value={button.value}
+            position={[0, 0.045 * i, 0]}
+            color="white"
+            bgColor="black"
+            fontSize={0.02}
+            padding={0.01}
+            bgRadius={0.01}
+            onClick={() => {
+              if (turn === null) return console.log('not active')
+              if (seat != turn) return console.log('not your turn')
+              if (button.action === 'fold') dispatch('fold', seat)
+              let amount
+              if (bet === 0) {
+                amount = 3
+              } else if (bet === 3) {
+                amount = 6
+              } else {
+                amount = bet
+              }
+              if (button.action === 'call')
+                dispatch('bet', button.action, seat, amount)
+              if (button.action === 'raise')
+                dispatch('bet', button.action, seat, amount * 2)
+              if (button.action === 'fold') dispatch('fold', seat)
+            }}
+          />
+        ))}
+      </group>
+    </>
+  )
+}
+
+export function PoolInfo({ seat }) {
+  const [player] = useSyncState(state => state.players[seat])
+  if (!player) return null
+  const [pot] = useSyncState(state => state.pot)
+  const [turn] = useSyncState(state => state?.turn)
+  const [bet] = useSyncState(state => state?.bet || 0)
+  const [round] = useSyncState(state => state?.round || 'waiting')
+  const { money } = player
+
+  const info = [
+    { Label: 'Pot', Value: pot },
+    { Label: 'Bet', Value: bet },
+    { Label: 'Money', Value: money },
+    { Label: 'Turn', Value: turn != null ? `Player ${turn + 1}` : 'none' },
+    { Label: 'Round', Value: round },
+  ]
+
+  return (
+    <>
+      <group position={[0.15, -0.08, 0]}>
+        {info.map((item, i) => (
+          <text
+            key={i}
+            value={`${item.Label}: ${item.Value}`}
+            position={[0, 0.045 * i, 0]}
+            color="white"
+            bgColor="black"
+            fontSize={0.02}
+            padding={0.01}
+            bgRadius={0.01}
+          />
+        ))}
+      </group>
     </>
   )
 }

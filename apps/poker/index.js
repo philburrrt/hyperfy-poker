@@ -1,230 +1,389 @@
 import React, { useState, useEffect } from 'react'
-import { useSyncState, DEG2RAD } from 'hyperfy'
-import { Hand } from './pokersolver'
+import { useSyncState, DEG2RAD, useWorld, randomInt } from 'hyperfy'
 import { UI } from './ui'
-import { Seat } from './seat'
+import { Table } from './table'
+import { Hand } from './pokersolver'
 
-export const positions = [
-  [0, 0, 1.5],
-  [1.3, 0, 1.3],
-  [1.5, 0, 0],
-  [1.3, 0, -1.3],
-  [0, 0, -1.5],
-  [-1.3, 0, -1.3],
-  [-1.5, 0, 0],
-  [-1.3, 0, 1.3],
-]
+// TODO:
+// * Shuffle and deal cards ('preflop')
+// * Solve for winner and distribute pot ('showdown')
+
+export const tiltBack = [DEG2RAD * -35, 0, 0]
+
+const cards = {
+  suits: ['h', 's', 'c', 'd'],
+  cards: ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'],
+}
 
 export default function Poker() {
+  const world = useWorld()
+
   const [user, setUser] = useState({
     seat: null,
     uid: null,
     name: null,
   })
+
   return (
     <app>
-      <model
-        src="deck.glb"
-        position={[0, 0, 0]}
-        scale={0.001}
-        rotation={[DEG2RAD * 90, 0, 0]}
-      />
-      <UI user={user} setUser={setUser} />
-      <Seat user={user} setUser={setUser} />
-      <Winners />
+      {world.isServer && <ServerLogic />}
+      <model src="poker_table.glb" scale={0.45} position={[0, 0.95, 0]} />
+      <Table />
+      <Node user={user} setUser={setUser} />
+      <Test />
     </app>
   )
 }
 
-export function Winners() {
-  const [winner] = useSyncState(state => state.winner)
-  const [winningHand] = useSyncState(state => state.winningHand)
-  const [seats] = useSyncState(state => state.seats)
+export function Test() {
+  const [time] = useSyncState(state => state.time)
+  const [phase] = useSyncState(state => state.phase)
   const [turn] = useSyncState(state => state.turn)
+  const [winner] = useSyncState(state => state.winner)
+
+  const info = [
+    { label: 'time', value: time },
+    { label: 'phase', value: phase },
+    { label: 'turn', value: turn },
+    { label: 'winner', value: winner },
+  ]
 
   return (
     <>
-      {winner && winningHand && turn.round === 5 && (
-        <>
-          {winner.map((player, idx) => {
-            return (
-              <billboard key={idx} axis="y" position={[0, 0.2, 0]}>
-                <group key={idx}>
-                  <text
-                    key={idx}
-                    value={
-                      seats[player].name === 'Anonymous'
-                        ? `Seat: ${parseInt(player) + 1}`
-                        : seats[player].name
-                    }
-                    position={
-                      winner.length === 1
-                        ? [0, 0.1, 0]
-                        : [0, 0.1 * (idx + 1), 0]
-                    }
-                    color="green"
-                  />
-                </group>
-              </billboard>
-            )
-          })}
-          <billboard axis="y" position={[0, 0.2, 0]}>
-            <text value={winningHand} color="green" />
-          </billboard>
-        </>
-      )}
+      {info.map(({ label, value }, i) => (
+        <text
+          key={i}
+          value={`${label}: ${value}`}
+          position={[0, 1.75 - 0.05 * i, 0]}
+          color="white"
+          bgColor="black"
+          padding={0.025}
+          bgRadius={0.01}
+          fontSize={0.05}
+        />
+      ))}
     </>
   )
 }
 
+const positions = [
+  [0, 1.25, 1.1],
+  [0.8, 1.25, 0.8],
+  [1.1, 1.25, 0],
+  [0.8, 1.25, -0.8],
+  [0, 1.25, -1.1],
+  [-0.8, 1.25, -0.8],
+  [-1.1, 1.25, 0],
+  [-0.8, 1.25, 0.8],
+]
+
+export function Node({ user, setUser }) {
+  return (
+    <>
+      {positions.map((pos, i) => (
+        <group key={i} position={pos} rotation={[0, DEG2RAD * (45 * i), 0]}>
+          <panel
+            size={[0.5, 0.25]}
+            canvasSize={[128, 128]}
+            unitSize={1}
+            style={{ bg: 'rgba(0,0,0,.2)' }}
+            position={[0, -0.01, 0]}
+            rotation={tiltBack}
+          />
+          <UI seat={i} user={user} setUser={setUser} />
+        </group>
+      ))}
+    </>
+  )
+}
+
+/*
+  - idle
+  - 2 players join
+  - queued
+  - active
+  - intermission -> preflop -> flop -> turn -> river -> showdown -> intermission
+  - during intermission, player hands, the bet amount, and the pot amount are reset
+  - turn = first in taken || first in taken after winner
+  - players can join during intermission
+  - if only 1 player left, game winds down (all variables reset)
+*/
+
+const QUEUE_TIME = 2.5
+const ENDING_TIME = 10
+export function ServerLogic() {
+  const world = useWorld()
+  const [state, dispatch] = useSyncState(state => state)
+  const { phase, pot, players, taken, round, actions, community } = state
+
+  function getNextRound() {
+    if (round === 'intermission') return 'preflop'
+    if (round === 'preflop') return 'flop'
+    if (round === 'flop') return 'turn'
+    if (round === 'turn') return 'river'
+    if (round === 'river') return 'showdown'
+    if (round === 'showdown') return 'intermission'
+  }
+
+  function getNextTurn() {
+    const takenSeats = taken.map((taken, i) => {
+      if (taken) return i
+    })
+    const first = state.winner || takenSeats[0]
+    let next
+    try {
+      next = takenSeats.find(seat => !state.players[seat].action)
+    } catch (e) {
+      next = null
+    }
+    return { first, next }
+  }
+
+  function shuffle() {
+    const deck = []
+    cards.suits.forEach(suit => {
+      cards.cards.forEach(card => {
+        deck.push(`${card}${suit}`)
+      })
+    })
+    deck.sort(() => randomInt(0, 1) - 0.5)
+    return deck
+  }
+
+  // math.floor() manually
+  function floor(num) {
+    const floor = num.toString().split('.')[0]
+    return parseInt(floor)
+  }
+
+  useEffect(() => {
+    // if idle and 2 players join, queue game
+    if (phase === 'idle') {
+      const taken = state.taken.filter(Boolean)
+      if (taken.length > 1) {
+        dispatch('setPhase', 'queued', world.getTime())
+      }
+    }
+    // wait QUEUE_TIME seconds, then start game when queued
+    if (phase === 'queued') {
+      return world.onUpdate(() => {
+        const now = world.getTime()
+        const elapsed = now - state.time
+        if (elapsed > QUEUE_TIME) {
+          dispatch('setPhase', 'active')
+        }
+      })
+    }
+    // if only 1 player left, game winds down
+    if (phase === 'queued' || phase === 'active') {
+      const taken = state.taken.filter(Boolean)
+      if (taken.length === 1) {
+        dispatch('setPhase', 'end', world.getTime())
+      }
+    }
+    if (phase === 'active') {
+      if (!round) {
+        console.log('New game. Setting round to intermission')
+        dispatch('setRound', 'intermission')
+      }
+    }
+    // wait ENDING_TIME seconds, then reset game
+    if (phase === 'end') {
+      return world.onUpdate(() => {
+        const now = world.getTime()
+        const elapsed = now - state.time
+        if (elapsed > ENDING_TIME) {
+          dispatch('setPhase', 'idle')
+        }
+      })
+    }
+  }, [phase, taken])
+
+  useEffect(() => {
+    if (round === 'intermission') {
+      dispatch('newRound')
+      setTimeout(() => {
+        dispatch('setRound', getNextRound())
+        const { first } = getNextTurn()
+        dispatch('setTurn', first)
+      }, 10000)
+    }
+
+    if (round === 'preflop') {
+      dispatch('deal', shuffle())
+    }
+
+    if (round === 'flop' || round === 'turn' || round === 'river') {
+      const { next } = getNextTurn()
+      dispatch('setTurn', next)
+    }
+
+    if (round === 'showdown') {
+      dispatch('setTurn', null)
+      setTimeout(() => {
+        dispatch('setRound', getNextRound())
+      }, 10000)
+
+      // * solve hands & give winner pot here
+      // i need the index of all players whos hand is not null || []
+      // make a new array of { seat, hand }
+      // give the solver an array of all players hands
+      // get the winner
+
+      const activeHands = players
+        .filter(player => player.hand.length > 0)
+        .map(player => {
+          return { seat: player.seat, hand: player.hand }
+        })
+
+      const results = activeHands.map(hand => {
+        return Hand.solve([...hand.hand, ...community])
+      })
+      const winner = Hand.winners(results)
+      let winners = []
+
+      console.log(
+        'winning info',
+        results[0].name,
+        results[1].name,
+        winner[0].name
+      )
+
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].name === winner[0].name) {
+          winners.push(activeHands[i].seat)
+        }
+      }
+
+      console.log('winners', winners)
+      const rewardPerWinner = floor(pot / winners.length)
+      winners.forEach(seat => {
+        dispatch('reward', seat, players[seat].money + rewardPerWinner)
+      })
+      if (winners.length === 1) dispatch('setWinner', winners[0])
+      console.log(`each winner gets ${rewardPerWinner}`)
+    }
+  }, [round])
+
+  // determines which player's turn it is after each action taken
+  useEffect(() => {
+    if (actions == 0) return
+    const { next } = getNextTurn()
+    console.log(`turn just taken, next is ${next}`)
+    if (next === null) {
+      dispatch('setRound', getNextRound())
+    } else {
+      dispatch('setTurn', next)
+    }
+  }, [actions])
+
+  return null
+}
+
+const player = {
+  name: null,
+  uid: null,
+  seat: null,
+  action: null,
+  money: 0,
+  bet: 0,
+  time: 0,
+  hand: [],
+}
+
 const initialState = {
+  phase: 'idle', // idle -> queued -> active -> end
+  // when phase is active, intermission starts
+  round: null, // intermission -> preflop -> flop -> turn -> river -> showdown
+  winner: null,
+  taken: [false, false, false, false, false, false, false, false],
+  pot: 0,
+  bet: 0,
+  turn: null,
+  players: [player, player, player, player, player, player, player, player],
+  community: [],
+  time: 0,
+  actions: 0,
   deck: [],
-  seats: Array(8).fill({
-    uid: null,
-    name: null,
-    hand: [],
-    handName: null,
-    ready: false,
-    active: false,
-  }),
-  turn: {
-    round: 0,
-    community: [],
-  },
-  winner: [],
-  winningHand: null,
 }
 
 export function getStore(state = initialState) {
   return {
     state,
     actions: {
-      join(state, { idx, uid, name }) {
-        state.seats[idx] = { uid, name, ready: false, active: false }
+      join(state, seat, name, uid) {
+        state.taken[seat] = true
+        state.players[seat] = { name, uid, seat, money: 1000, bet: 0, time: 0 }
+        console.log(`Seat ${seat + 1} taken by ${name} (${uid})`)
       },
-      exit(state, { idx }) {
-        state.seats[idx] = {
-          uid: null,
-          name: null,
-          hand: [],
-          handName: null,
-          ready: false,
-          active: false,
-        }
-        if (state.seats.every(seat => !seat.uid)) {
-          state.turn.round = 0
-          state.turn.community = []
-          state.winner = []
-          state.deck = []
-        }
-        const seated = Object.keys(state.seats).filter(
-          key => state.seats[key].uid
-        )
-        if (seated.length === 1) {
-          state.winner = seated
-          state.winningHand = 'Last player standing'
-          state.turn.round = 5
-        }
+      leave(state, seat) {
+        state.taken[seat] = false
+        state.players[seat] = player
       },
-      deck(state, { deck }) {
+      setPhase(state, phase, time = 0) {
+        state.phase = phase
+        state.time = time
+        console.log(`Phase: ${phase}`)
+      },
+      setRound(state, round) {
+        state.actions = 0
+        state.round = round
+        state.players.forEach((player, i) => {
+          state.players[i].action = null
+          state.players[i].time = 0
+        })
+        console.log(`Round: ${round}`)
+      },
+      newRound(state) {
+        state.pot = 0
+        state.deck = []
+        state.bet = 0
+        state.turn = null
+        state.community = []
+        state.players.forEach((player, i) => {
+          state.players[i].bet = 0
+          state.players[i].hand = []
+        })
+        state.actions = 0
+      },
+      reward(state, seat, amount) {
+        state.players[seat].money = amount
+      },
+      setWinner(state, seat) {
+        state.winner = seat
+      },
+      deal(state, deck) {
         state.deck = deck
+        state.players.forEach((player, i) => {
+          if (player.name) state.players[i].hand = [deck.pop(), deck.pop()]
+        })
+        state.community = [deck.pop(), deck.pop(), deck.pop()]
+        console.log('Dealt cards')
       },
-      ready(state, { idx }) {
-        state.seats[idx].ready = true
-        state.seats[idx].active = true
-
-        const active = state.seats.filter(seat => seat.active)
-        const ready = state.seats.filter(seat => seat.ready)
-
-        if (active.length === ready.length) {
-          if (state.turn.round === 0 && active.length != 1) {
-            state.seats.forEach(seat => {
-              seat.ready = false
-            })
-            state.turn.round = 1
-            Object.values(state.seats).forEach(seat => {
-              if (seat.uid) {
-                seat.hand = [state.deck.pop(), state.deck.pop()]
-              }
-            })
-          } else if (state.turn.round === 1) {
-            state.seats.forEach(seat => {
-              seat.ready = false
-            })
-            state.turn.round = 2
-            state.turn.community = [
-              state.deck.pop(),
-              state.deck.pop(),
-              state.deck.pop(),
-            ]
-          } else if (state.turn.round === 2) {
-            state.seats.forEach(seat => {
-              seat.ready = false
-            })
-            state.turn.round = 3
-            state.turn.community.push(state.deck.pop())
-          } else if (state.turn.round === 3) {
-            state.seats.forEach(seat => {
-              seat.ready = false
-            })
-            state.turn.round = 4
-            state.turn.community.push(state.deck.pop())
-          } else if (state.turn.round === 4) {
-            // make a list of keys of seats that are active
-            state.seats.forEach(seat => {
-              seat.ready = false
-            })
-            const activeSeats = Object.keys(state.seats).filter(
-              key => state.seats[key].active
-            )
-            // make a list of hands for each active seat
-            const hands = Object.keys(activeSeats).map(key => {
-              const seat = state.seats[activeSeats[key]]
-              const hand = Hand.solve([...seat.hand, ...state.turn.community])
-              return hand
-            })
-            // assign hand.name to according active seat's handName
-            hands.forEach((hand, idx) => {
-              state.seats[activeSeats[idx]].handName = hand.name
-            })
-            // find the best hand
-            const bestHand = Hand.winners(hands)
-            state.winningHand = bestHand[0].name
-            // find the seat(s) with the best hand
-            const winners = activeSeats.filter(
-              key => state.seats[key].handName === bestHand[0].name
-            )
-            // assign the winner(s) to state.winner
-            state.winner = Object.keys(winners).map(key => winners[key])
-
-            state.turn.round = 5
-          } else if (state.turn.round === 5) {
-            // reset game when all users click 'done'
-            state.seats.forEach(seat => {
-              seat.ready = false
-              seat.active = false
-              seat.hand = []
-              seat.handName = null
-            })
-            state.turn.round = 0
-            state.turn.community = []
-            state.winner = []
-            state.deck = []
-            state.winningHand = null
-          }
+      bet(state, type, seat, amount) {
+        if (amount > state.bet) {
+          state.bet = amount
         }
-      },
-      fold(state, { idx }) {
-        state.seats[idx].active = false
-        // if only one player is active, set their seat as winner and set round to 5
-        const activeSeats = Object.keys(state.seats).filter(
-          key => state.seats[key].active
+        state.players[seat].money -= amount
+        state.pot += amount
+        state.players[seat].action = type
+        console.log(
+          `Seat ${seat + 1} - ${type} - ${amount}. now has ${
+            state.players[seat].money
+          } left`
         )
-        if (activeSeats.length === 1) {
-          state.winner = activeSeats
-          state.winningHand = 'Last player standing'
-          state.turn.round = 5
-        }
+        state.actions++
+      },
+      setTurn(state, seat) {
+        state.turn = seat
+        console.log(`Seat ${seat + 1} is up`)
+      },
+      fold(state, seat) {
+        state.players[seat].bet = 0
+        state.players[seat].hand = []
+        state.players[seat].action = 'fold'
+        state.actions++
+        console.log(`Seat ${seat + 1} folded`)
       },
     },
   }
