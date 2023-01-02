@@ -5,14 +5,9 @@ import { Table } from './table'
 import { Hand } from './pokersolver'
 
 // TODO:
-// * Test with more players
-// * Player isn't removed after folding
-// * Create a UI for the back of each player's pannel
-// - Add timeout to moving to next phase so players have time to see the cards
-// * Ties should show which players are tied
-// * Fix player vs seat inconsistency (?)
-// * If a player folds and there is only 1 player left, make sure round goes to showdown and phase does not change
+// * Players might still be able to play after folding (if more than 1 player left)
 // * When player 1 vs player 5, preflop skips player 5 turn and moves to flop
+// * Make status a billboard
 
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
@@ -66,16 +61,16 @@ export function Status() {
       {info.map((info, i) => (
         <Fragment key={i}>
           {info.value && (
-            <text
-              key={i}
-              value={info.value}
-              position={[0, 1.7 + i * 0.1, 0]}
-              color="white"
-              bgColor="black"
-              padding={0.025}
-              bgRadius={0.01}
-              fontSize={0.05}
-            />
+            <billboard position={[0, 1.7 + i * 0.1, 0]}>
+              <text
+                value={info.value}
+                color="white"
+                bgColor="black"
+                padding={0.025}
+                bgRadius={0.01}
+                fontSize={0.05}
+              />
+            </billboard>
           )}
         </Fragment>
       ))}
