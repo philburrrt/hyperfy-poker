@@ -288,6 +288,13 @@ export function ServerLogic() {
   // determines which player's turn it is after each action taken
   useEffect(() => {
     if (actions == 0) return
+    // if only one player has cards, set round to showdown
+    if (round !== 'showdown' && round !== 'intermission') {
+      const activeHands = getActiveHands()
+      if (activeHands?.length === 1) {
+        dispatch('setRound', 'showdown')
+      }
+    }
     const { next } = getNextTurn()
     if (next === null) {
       dispatch('setRound', getNextRound())
