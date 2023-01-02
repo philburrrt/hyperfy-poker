@@ -4,6 +4,7 @@ import { useSyncState, DEG2RAD } from 'hyperfy'
 // TODO:
 // * Display each user's remaining money on the table
 // * Display each user's current bet on the table
+
 export function Table() {
   return <Community />
 }

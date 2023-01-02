@@ -1,8 +1,70 @@
-import React, { useEffect } from 'react'
-import { useSyncState, useWorld } from 'hyperfy'
+import React from 'react'
+import { useSyncState, useWorld, DEG2RAD } from 'hyperfy'
 import { tiltBack } from '.'
 
-// Sits inside of a Node. UI for each seat.
+// Sits inside of a Node. UI _behind_ each seat.
+// Displays the action a player last took
+// Displays the seat number
+// Displays the player's name
+// Displays their cards during showdown
+export function InfoBoard({ seat }) {
+  const [player] = useSyncState(state => state.players[seat])
+  const [round] = useSyncState(state => state.round)
+  const [occupied] = useSyncState(state => state.taken[seat])
+  const { name, action, hand } = player
+  return (
+    // rotate grouop 180 degrees
+    <group rotation={[0, DEG2RAD * 180, 0]}>
+      {occupied && (
+        <text
+          value={`Seat: ${seat + 1}`}
+          position={[0, 0.095, 0.1]}
+          color="white"
+          fontSize={0.035}
+          bgColor="black"
+          padding={0.01}
+          bgRadius={0.01}
+        />
+      )}
+      {name && (
+        <text
+          value={`Player: ${name}`}
+          position={[0, 0.065, 0.1]}
+          color="white"
+          fontSize={0.035}
+          bgColor="black"
+          padding={0.01}
+          bgRadius={0.01}
+        />
+      )}
+      {action && (
+        <text
+          value={`${action.charAt(0).toUpperCase()}${action.slice(1)}`}
+          position={[0, 0.03, 0.1]}
+          color="white"
+          fontSize={0.035}
+          bgColor="black"
+          padding={0.01}
+          bgRadius={0.01}
+        />
+      )}
+      {hand && round === 'showdown' && (
+        <group position={[-0.02, -0.05, 0.1]} rotation={tiltBack}>
+          {hand.map((card, i) => (
+            <image
+              key={i}
+              src={`cards/${card}.png`}
+              width={0.075}
+              position={[0.05 * i, 0, i * 0.0025]}
+            />
+          ))}
+        </group>
+      )}
+    </group>
+  )
+}
+
+// Sits inside of a Node. UI _in front_ each seat.
 export function UI({ seat, user, setUser }) {
   const [occupied] = useSyncState(state => state.taken[seat])
 

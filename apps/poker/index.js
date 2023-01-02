@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useSyncState, DEG2RAD, useWorld, randomInt } from 'hyperfy'
-import { UI } from './ui'
+import { UI, InfoBoard } from './ui'
 import { Table } from './table'
 import { Hand } from './pokersolver'
 
@@ -14,6 +14,9 @@ import { Hand } from './pokersolver'
 // - if in showdown, it displays their hand
 // * Ties should show which players are tied
 // * Fix player vs seat inconsistency
+// * If a player folds and there is only 1 player left, make sure round goes to showdown and phase does not change
+// * Exit is not triggering end phase
+// * When player 1 vs player 5, preflop skips player 5 turn and moves to flop
 
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
@@ -98,6 +101,7 @@ export function Node({ user, setUser }) {
             rotation={tiltBack}
           />
           <UI seat={i} user={user} setUser={setUser} />
+          <InfoBoard seat={i} />
         </group>
       ))}
     </>
@@ -362,6 +366,7 @@ export function getStore(state = initialState) {
         state.players.forEach((player, i) => {
           state.players[i].bet = 0
           state.players[i].hand = []
+          state.players[i].action = null
         })
         state.actions = 0
       },
