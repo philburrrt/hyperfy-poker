@@ -6,16 +6,12 @@ import { Hand } from './pokersolver'
 
 // TODO:
 // * Test with more players
-// * Test with flops
-// * Annotate
+// * Player isn't removed after folding
 // * Create a UI for the back of each player's pannel
-// - Player number
-// - If mid game, it displays their choice of action
-// - if in showdown, it displays their hand
+// - Add timeout to moving to next phase so players have time to see the cards
 // * Ties should show which players are tied
-// * Fix player vs seat inconsistency
+// * Fix player vs seat inconsistency (?)
 // * If a player folds and there is only 1 player left, make sure round goes to showdown and phase does not change
-// * Exit is not triggering end phase
 // * When player 1 vs player 5, preflop skips player 5 turn and moves to flop
 
 export const tiltBack = [DEG2RAD * -35, 0, 0]
@@ -108,7 +104,6 @@ export function Node({ user, setUser }) {
   )
 }
 
-// todo: add
 const QUEUE_TIME = 2.5
 export function ServerLogic() {
   const world = useWorld()
@@ -200,6 +195,7 @@ export function ServerLogic() {
     }
     // wait ENDING_TIME seconds, then reset game
     if (phase === 'end') {
+      dispatch('setStatus', 'Shutting down...')
       setTimeout(() => {
         dispatch('reset')
       }, 1000)
@@ -212,16 +208,25 @@ export function ServerLogic() {
       dispatch('setStatus', 'New round starting...')
       const { firstMover } = order
       dispatch('newRound')
-      setTimeout(() => {
-        dispatch('setRound', getNextRound())
-        const { first } = getNextTurn()
-        dispatch('setTurn', firstMover ? firstMover : first)
-        setOrder({
-          firstMover: firstMover ? firstMover : first,
-          lastMover: firstMover ? firstMover : first,
-        })
-        dispatch('setStatus', null)
-      }, 5000)
+
+      function intermission() {
+        if (phase !== 'end') {
+          dispatch('setRound', getNextRound())
+          const { first } = getNextTurn()
+          dispatch('setTurn', firstMover ? firstMover : first)
+          setOrder({
+            firstMover: firstMover ? firstMover : first,
+            lastMover: firstMover ? firstMover : first,
+          })
+          dispatch('setStatus', null)
+        }
+      }
+
+      const timer = setTimeout(intermission, 5000)
+      if (phase === 'end') {
+        clearTimeout(timer)
+      }
+      return () => clearTimeout(timer)
     }
 
     if (round === 'preflop') {
@@ -291,6 +296,8 @@ export function ServerLogic() {
     }
   }, [actions])
 
+  // * ------------------ DEBUG ------------------ *
+
   return null
 }
 
@@ -329,17 +336,16 @@ export function getStore(state = initialState) {
       join(state, seat, name, uid) {
         state.taken[seat] = true
         state.players[seat] = { name, uid, seat, money: 1000, bet: 0, time: 0 }
-        console.log(`Seat ${seat + 1} taken by ${name} (${uid})`)
       },
       exit(state, seat) {
+        const taken = state.taken.filter(Boolean)
+        if (taken.length === 2) state.phase = 'end'
         state.taken[seat] = false
         state.players[seat] = player
-        console.log(`Seat ${seat + 1} is now empty`)
       },
       setPhase(state, phase, time = 0) {
         state.phase = phase
         state.time = time
-        console.log(`Phase: ${phase}`)
       },
       setRound(state, round) {
         state.actions = 0
@@ -348,14 +354,33 @@ export function getStore(state = initialState) {
           state.players[i].action = null
           state.players[i].time = 0
         })
-        console.log(`Round: ${round}`)
       },
       setStatus(state, status) {
         state.status = status
-        console.log(`Status: ${status}`)
       },
       reset(state) {
-        state = initialState
+        state.phase = 'idle'
+        state.round = null
+        state.winner = null
+        state.taken = [false, false, false, false, false, false, false, false]
+        state.pot = 0
+        state.bet = 0
+        state.turn = null
+        state.players = [
+          player,
+          player,
+          player,
+          player,
+          player,
+          player,
+          player,
+          player,
+        ]
+        state.community = []
+        state.time = 0
+        state.actions = 0
+        state.deck = []
+        state.status = null
       },
       newRound(state) {
         state.pot = 0
@@ -382,7 +407,6 @@ export function getStore(state = initialState) {
           if (player.name) state.players[i].hand = [deck.pop(), deck.pop()]
         })
         state.community = [deck.pop(), deck.pop(), deck.pop()]
-        console.log('Dealt cards')
       },
       bet(state, type, seat, amount) {
         if (amount > state.bet) {
@@ -391,23 +415,16 @@ export function getStore(state = initialState) {
         state.players[seat].money -= amount
         state.pot += amount
         state.players[seat].action = type
-        console.log(
-          `Seat ${seat + 1} - ${type} - ${amount}. now has ${
-            state.players[seat].money
-          } left`
-        )
         state.actions++
       },
       setTurn(state, seat) {
         state.turn = seat
-        console.log(`Seat ${seat + 1} is up`)
       },
       fold(state, seat) {
         state.players[seat].bet = 0
         state.players[seat].hand = []
         state.players[seat].action = 'fold'
         state.actions++
-        console.log(`Seat ${seat + 1} folded`)
       },
     },
   }
