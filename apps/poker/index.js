@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Fragment } from 'react'
 import { useSyncState, DEG2RAD, useWorld, randomInt } from 'hyperfy'
 import { UI, InfoBoard } from './ui'
 import { Table } from './table'
