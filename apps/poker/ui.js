@@ -2,15 +2,15 @@ import React, { useEffect } from 'react'
 import { useSyncState, useWorld } from 'hyperfy'
 import { tiltBack } from '.'
 
+// Sits inside of a Node. UI for each seat.
 export function UI({ seat, user, setUser }) {
   const [occupied] = useSyncState(state => state.taken[seat])
-  const [player] = useSyncState(state => state.players[seat])
 
   return (
     <>
       <group rotation={tiltBack}>
         <Seat seat={seat} />
-        <Exit seat={seat} />
+        <Exit seat={seat} user={user} />
         {user?.seat === seat && <Hand seat={seat} />}
         {!occupied && <Join seat={seat} setUser={setUser} />}
         {occupied && (
@@ -24,6 +24,8 @@ export function UI({ seat, user, setUser }) {
   )
 }
 
+// Shows if seat is not taken
+// Can click if phase == idle or round == intermission
 export function Join({ seat, setUser }) {
   const world = useWorld()
   const [round, dispatch] = useSyncState(state => state.taken[seat])
@@ -49,7 +51,9 @@ export function Join({ seat, setUser }) {
   )
 }
 
-export function Exit({ seat }) {
+// Always shows.
+// Only works if player occupies the seat
+export function Exit({ seat, user }) {
   const [player, dispatch] = useSyncState(state => state.players[seat])
 
   return (
@@ -62,13 +66,14 @@ export function Exit({ seat }) {
       bgRadius={0.015}
       fontSize={0.015}
       onClick={() => {
-        if (player?.seat !== seat) return console.log('not your seat')
+        if (user?.seat !== seat) return console.log('not your seat')
         dispatch('exit', seat)
       }}
     />
   )
 }
 
+// Shows hand to user who occupies the seat
 export function Hand({ seat }) {
   const [hand] = useSyncState(state => state.players[seat].hand)
   return (
@@ -89,6 +94,7 @@ export function Hand({ seat }) {
   )
 }
 
+// Shows public information about the seat
 export function Seat({ seat }) {
   const [player] = useSyncState(state => state.players[seat])
   const name = player.name ? player.name : null
@@ -118,10 +124,11 @@ export function Seat({ seat }) {
   )
 }
 
+// Fold, call or raise
+// Only works if player occupies the seat
 export function Actions({ seat, user }) {
   const [bet, dispatch] = useSyncState(state => state.bet)
   const [turn] = useSyncState(state => state?.turn)
-  // fold, call or raise
   const buttons = [
     { value: 'Fold', action: 'fold' },
     { value: 'Call', action: 'call' },
@@ -167,6 +174,7 @@ export function Actions({ seat, user }) {
   )
 }
 
+// Shows public information about the game state
 export function PoolInfo({ seat }) {
   const [player] = useSyncState(state => state.players[seat])
   if (!player) return null
