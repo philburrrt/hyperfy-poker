@@ -11,7 +11,7 @@ export function UI({ seat, user, setUser }) {
       <group rotation={tiltBack}>
         <Seat seat={seat} />
         <Exit seat={seat} />
-        {occupied && <Hand seat={seat} />}
+        {user?.seat === seat && <Hand seat={seat} />}
         {!occupied && <Join seat={seat} setUser={setUser} />}
         {occupied && (
           <>
@@ -71,10 +71,6 @@ export function Exit({ seat }) {
 
 export function Hand({ seat }) {
   const [hand] = useSyncState(state => state.players[seat].hand)
-  useEffect(() => {
-    console.log('hand', hand, seat)
-  }, [hand])
-
   return (
     <>
       {hand && (
@@ -94,10 +90,8 @@ export function Hand({ seat }) {
 }
 
 export function Seat({ seat }) {
-  // all public info
   const [player] = useSyncState(state => state.players[seat])
   const name = player.name ? player.name : null
-
   return (
     <>
       <text
