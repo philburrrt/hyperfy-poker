@@ -64,7 +64,7 @@ export function Status() {
   return (
     <>
       {info.map((info, i) => (
-        <>
+        <Fragment key={i}>
           {info.value && (
             <text
               key={i}
@@ -77,7 +77,7 @@ export function Status() {
               fontSize={0.05}
             />
           )}
-        </>
+        </Fragment>
       ))}
     </>
   )
