@@ -107,7 +107,6 @@ export function ServerLogic() {
     gameStart: null,
     roundStart: null,
   })
-
   // * ------------------ UTILS ------------------ *
   function getNextRound() {
     if (round === 'intermission') return 'preflop'
@@ -124,12 +123,17 @@ export function ServerLogic() {
   // if there are no index values greater than the current roundStart, then set roundStart to the first index value in taken
 
   function getStartingSeat() {
+    // taken seats is an array of the index values of items in taken that are true
+    const takenSeats = taken.reduce((acc, curr, i) => {
+      if (curr) acc.push(i)
+      return acc
+    }, [])
+    const lowestSeat = takenSeats[0]
     if (!order.gameStart) {
-      const lowestSeat = taken.reduce((a, b) => Math.min(a, b))
       setOrder({ ...order, gameStart: lowestSeat, roundStart: lowestSeat })
       return lowestSeat
     } else {
-      const nextSeat = taken.find(seat => seat > roundStart)
+      const nextSeat = takenSeats.find(seat => seat > order.roundStart)
       if (nextSeat) {
         setOrder({ ...order, roundStart: nextSeat })
         return nextSeat
@@ -143,17 +147,12 @@ export function ServerLogic() {
   // the next turn will either be index values greater than the current turn in getActiveSeats(), or the first index value in getActiveSeats()
   function getNextTurn() {
     const activeHands = getActiveHands()
-    console.log('activeHands', activeHands)
     const activeSeats = activeHands.map(hand => hand.seat)
-    console.log('activeSeats', activeSeats)
     const nextSeat = activeSeats.find(seat => seat > turn)
-    console.log('nextSeat', nextSeat)
     if (!nextSeat) {
       const lowestSeat = activeSeats.reduce((a, b) => Math.min(a, b))
-      console.log('lowestSeat', lowestSeat)
       return lowestSeat
     } else {
-      console.log('nextSeat', nextSeat)
       return nextSeat
     }
   }
@@ -295,7 +294,6 @@ export function ServerLogic() {
         dispatch('setRound', getNextRound())
         return
       } else {
-        console.log('next turn', getNextTurn())
         dispatch('setTurn', getNextTurn())
       }
     }

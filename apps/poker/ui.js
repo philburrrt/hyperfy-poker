@@ -15,20 +15,18 @@ export function InfoBoard({ seat }) {
   return (
     // rotate grouop 180 degrees
     <group rotation={[0, DEG2RAD * 180, 0]}>
-      {occupied && (
-        <text
-          value={`Seat: ${seat + 1}`}
-          position={[0, 0.095, 0.1]}
-          color="white"
-          fontSize={0.035}
-          bgColor="black"
-          padding={0.01}
-          bgRadius={0.01}
-        />
-      )}
+      <text
+        value={`Player: ${seat + 1}`}
+        position={[0, 0.095, 0.1]}
+        color="white"
+        fontSize={0.035}
+        bgColor="black"
+        padding={0.01}
+        bgRadius={0.01}
+      />
       {name && (
         <text
-          value={`Player: ${name}`}
+          value={name}
           position={[0, 0.065, 0.1]}
           color="white"
           fontSize={0.035}
@@ -163,7 +161,7 @@ export function Seat({ seat }) {
   return (
     <>
       <text
-        value={`Seat: ${seat + 1}`}
+        value={`Player: ${seat + 1}`}
         position={[0, 0.1, 0.0025]}
         color="white"
         fontSize={0.02}
