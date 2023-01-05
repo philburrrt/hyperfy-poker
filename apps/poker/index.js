@@ -7,7 +7,6 @@ import { Hand } from './pokersolver'
 // TODO:
 // * Players might still be able to play after folding (if more than 1 player left)
 // * When player 1 vs player 5, preflop skips player 5 turn and moves to flop
-// * Make status a billboard
 
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
@@ -61,7 +60,7 @@ export function Status() {
       {info.map((info, i) => (
         <Fragment key={i}>
           {info.value && (
-            <billboard position={[0, 1.7 + i * 0.1, 0]}>
+            <billboard axis="y" position={[0, 1.7 + i * 0.1, 0]}>
               <text
                 value={info.value}
                 color="white"
@@ -103,10 +102,10 @@ const QUEUE_TIME = 2.5
 export function ServerLogic() {
   const world = useWorld()
   const [state, dispatch] = useSyncState(state => state)
-  const { phase, pot, players, taken, round, actions, community } = state
+  const { phase, pot, players, taken, round, actions, community, turn } = state
   const [order, setOrder] = useState({
-    firstMover: null,
-    lastMover: null,
+    gameStart: null,
+    roundStart: null,
   })
 
   // * ------------------ UTILS ------------------ *
@@ -119,18 +118,44 @@ export function ServerLogic() {
     if (round === 'showdown') return 'intermission'
   }
 
-  function getNextTurn() {
-    const takenSeats = taken.map((taken, i) => {
-      if (taken) return i
-    })
-    const first = state.winner || takenSeats[0]
-    let next
-    try {
-      next = takenSeats.find(seat => !state.players[seat].action)
-    } catch (e) {
-      next = null
+  // during intermission, check to see if there is an ogSeat
+  // if there isn't, then set the lowest index value in taken as the ogSeat and roundStart
+  // if there is, then set setRoundStart to the next seat in taken
+  // if there are no index values greater than the current roundStart, then set roundStart to the first index value in taken
+
+  function getStartingSeat() {
+    if (!order.gameStart) {
+      const lowestSeat = taken.reduce((a, b) => Math.min(a, b))
+      setOrder({ ...order, gameStart: lowestSeat, roundStart: lowestSeat })
+      return lowestSeat
+    } else {
+      const nextSeat = taken.find(seat => seat > roundStart)
+      if (nextSeat) {
+        setOrder({ ...order, roundStart: nextSeat })
+        return nextSeat
+      } else {
+        setOrder({ ...order, roundStart: lowestSeat })
+        return lowestSeat
+      }
     }
-    return { first, next }
+  }
+
+  // the next turn will either be index values greater than the current turn in getActiveSeats(), or the first index value in getActiveSeats()
+  function getNextTurn() {
+    const activeHands = getActiveHands()
+    console.log('activeHands', activeHands)
+    const activeSeats = activeHands.map(hand => hand.seat)
+    console.log('activeSeats', activeSeats)
+    const nextSeat = activeSeats.find(seat => seat > turn)
+    console.log('nextSeat', nextSeat)
+    if (!nextSeat) {
+      const lowestSeat = activeSeats.reduce((a, b) => Math.min(a, b))
+      console.log('lowestSeat', lowestSeat)
+      return lowestSeat
+    } else {
+      console.log('nextSeat', nextSeat)
+      return nextSeat
+    }
   }
 
   function getActiveHands() {
@@ -201,18 +226,12 @@ export function ServerLogic() {
   useEffect(() => {
     if (round === 'intermission') {
       dispatch('setStatus', 'New round starting...')
-      const { firstMover } = order
       dispatch('newRound')
 
       function intermission() {
         if (phase !== 'end') {
           dispatch('setRound', getNextRound())
-          const { first } = getNextTurn()
-          dispatch('setTurn', firstMover ? firstMover : first)
-          setOrder({
-            firstMover: firstMover ? firstMover : first,
-            lastMover: firstMover ? firstMover : first,
-          })
+          dispatch('setTurn', getStartingSeat())
           dispatch('setStatus', null)
         }
       }
@@ -230,23 +249,6 @@ export function ServerLogic() {
 
     // * ------------------ FLOP, TURN, RIVER ------------------ *
     if (round === 'flop' || round === 'turn' || round === 'river') {
-      const { lastMover, firstMover } = order
-      const nextPlayer = players.find(player => {
-        return player.seat > lastMover && player.hand.length > 0
-      })
-      if (!nextPlayer) {
-        dispatch('setTurn', firstMover)
-        setOrder({
-          firstMover: firstMover,
-          lastMover: firstMover,
-        })
-        return
-      }
-      dispatch('setTurn', nextPlayer.seat)
-      setOrder({
-        firstMover: order.firstMover,
-        lastMover: nextPlayer.seat,
-      })
     }
 
     // * ------------------ SHOWDOWN ------------------ *
@@ -288,13 +290,14 @@ export function ServerLogic() {
       const activeHands = getActiveHands()
       if (activeHands?.length === 1) {
         dispatch('setRound', 'showdown')
+        return
+      } else if (activeHands?.length === actions) {
+        dispatch('setRound', getNextRound())
+        return
+      } else {
+        console.log('next turn', getNextTurn())
+        dispatch('setTurn', getNextTurn())
       }
-    }
-    const { next } = getNextTurn()
-    if (next === null) {
-      dispatch('setRound', getNextRound())
-    } else {
-      dispatch('setTurn', next)
     }
   }, [actions])
 
