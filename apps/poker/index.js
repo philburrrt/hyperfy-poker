@@ -6,8 +6,7 @@ import { Hand } from './pokersolver'
 
 // TODO:
 // * Players might still be able to play after folding (if more than 1 player left)
-// * When player 1 vs player 5, preflop skips player 5 turn and moves to flop
-// * Make status a billboard
+// * Third player is unable to join
 
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
@@ -61,7 +60,7 @@ export function Status() {
       {info.map((info, i) => (
         <Fragment key={i}>
           {info.value && (
-            <billboard position={[0, 1.7 + i * 0.1, 0]}>
+            <billboard axis="y" position={[0, 1.7 + i * 0.1, 0]}>
               <text
                 value={info.value}
                 color="white"
@@ -99,16 +98,14 @@ export function Node({ user, setUser }) {
   )
 }
 
-const QUEUE_TIME = 2.5
 export function ServerLogic() {
   const world = useWorld()
   const [state, dispatch] = useSyncState(state => state)
-  const { phase, pot, players, taken, round, actions, community } = state
+  const { phase, pot, players, taken, round, actions, community, turn } = state
   const [order, setOrder] = useState({
-    firstMover: null,
-    lastMover: null,
+    gameStart: null,
+    roundStart: null,
   })
-
   // * ------------------ UTILS ------------------ *
   function getNextRound() {
     if (round === 'intermission') return 'preflop'
@@ -119,18 +116,37 @@ export function ServerLogic() {
     if (round === 'showdown') return 'intermission'
   }
 
-  function getNextTurn() {
-    const takenSeats = taken.map((taken, i) => {
-      if (taken) return i
-    })
-    const first = state.winner || takenSeats[0]
-    let next
-    try {
-      next = takenSeats.find(seat => !state.players[seat].action)
-    } catch (e) {
-      next = null
+  function getStartingSeat() {
+    const takenSeats = taken.reduce((acc, curr, i) => {
+      if (curr) acc.push(i)
+      return acc
+    }, [])
+    const lowestSeat = takenSeats[0]
+    if (!order.gameStart) {
+      setOrder({ ...order, gameStart: lowestSeat, roundStart: lowestSeat })
+      return lowestSeat
+    } else {
+      const nextSeat = takenSeats.find(seat => seat > order.roundStart)
+      if (nextSeat) {
+        setOrder({ ...order, roundStart: nextSeat })
+        return nextSeat
+      } else {
+        setOrder({ ...order, roundStart: lowestSeat })
+        return lowestSeat
+      }
     }
-    return { first, next }
+  }
+
+  function getNextTurn() {
+    const activeHands = getActiveHands()
+    const activeSeats = activeHands.map(hand => hand.seat)
+    const nextSeat = activeSeats.find(seat => seat > turn)
+    if (!nextSeat) {
+      const lowestSeat = activeSeats.reduce((a, b) => Math.min(a, b))
+      return lowestSeat
+    } else {
+      return nextSeat
+    }
   }
 
   function getActiveHands() {
@@ -158,6 +174,8 @@ export function ServerLogic() {
   }
 
   // * ------------------ PHASE SYSTEM ------------------ *
+  const QUEUE_TIME = 7.5
+  const ENDING_TIME = 5
   useEffect(() => {
     // if idle and 2 players join, queue game
     if (phase === 'idle') {
@@ -193,31 +211,27 @@ export function ServerLogic() {
       dispatch('setStatus', 'Shutting down...')
       setTimeout(() => {
         dispatch('reset')
-      }, 1000)
+      }, ENDING_TIME * 1000)
     }
   }, [phase, taken])
 
   // * ------------------ Intermission ------------------ *
+  const INTERMISSION_TIME = 5
+  const SHOWDOWN_TIME = 5
   useEffect(() => {
     if (round === 'intermission') {
       dispatch('setStatus', 'New round starting...')
-      const { firstMover } = order
       dispatch('newRound')
 
       function intermission() {
         if (phase !== 'end') {
           dispatch('setRound', getNextRound())
-          const { first } = getNextTurn()
-          dispatch('setTurn', firstMover ? firstMover : first)
-          setOrder({
-            firstMover: firstMover ? firstMover : first,
-            lastMover: firstMover ? firstMover : first,
-          })
+          dispatch('setTurn', getStartingSeat())
           dispatch('setStatus', null)
         }
       }
 
-      const timer = setTimeout(intermission, 5000)
+      const timer = setTimeout(intermission, INTERMISSION_TIME * 1000)
       if (phase === 'end') {
         clearTimeout(timer)
       }
@@ -230,23 +244,6 @@ export function ServerLogic() {
 
     // * ------------------ FLOP, TURN, RIVER ------------------ *
     if (round === 'flop' || round === 'turn' || round === 'river') {
-      const { lastMover, firstMover } = order
-      const nextPlayer = players.find(player => {
-        return player.seat > lastMover && player.hand.length > 0
-      })
-      if (!nextPlayer) {
-        dispatch('setTurn', firstMover)
-        setOrder({
-          firstMover: firstMover,
-          lastMover: firstMover,
-        })
-        return
-      }
-      dispatch('setTurn', nextPlayer.seat)
-      setOrder({
-        firstMover: order.firstMover,
-        lastMover: nextPlayer.seat,
-      })
     }
 
     // * ------------------ SHOWDOWN ------------------ *
@@ -255,7 +252,7 @@ export function ServerLogic() {
       dispatch('setTurn', null)
       setTimeout(() => {
         dispatch('setRound', getNextRound())
-      }, 10000)
+      }, SHOWDOWN_TIME * 1000)
 
       const activeHands = getActiveHands()
 
@@ -288,13 +285,13 @@ export function ServerLogic() {
       const activeHands = getActiveHands()
       if (activeHands?.length === 1) {
         dispatch('setRound', 'showdown')
+        return
+      } else if (activeHands?.length === actions) {
+        dispatch('setRound', getNextRound())
+        return
+      } else {
+        dispatch('setTurn', getNextTurn())
       }
-    }
-    const { next } = getNextTurn()
-    if (next === null) {
-      dispatch('setRound', getNextRound())
-    } else {
-      dispatch('setTurn', next)
     }
   }, [actions])
 
@@ -338,6 +335,7 @@ export function getStore(state = initialState) {
       join(state, seat, name, uid) {
         state.taken[seat] = true
         state.players[seat] = { name, uid, seat, money: 1000, bet: 0, time: 0 }
+        console.log(`Player ${seat + 1} joined`)
       },
       exit(state, seat) {
         const taken = state.taken.filter(Boolean)

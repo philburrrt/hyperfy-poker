@@ -15,20 +15,18 @@ export function InfoBoard({ seat }) {
   return (
     // rotate grouop 180 degrees
     <group rotation={[0, DEG2RAD * 180, 0]}>
-      {occupied && (
-        <text
-          value={`Seat: ${seat + 1}`}
-          position={[0, 0.095, 0.1]}
-          color="white"
-          fontSize={0.035}
-          bgColor="black"
-          padding={0.01}
-          bgRadius={0.01}
-        />
-      )}
+      <text
+        value={`Player: ${seat + 1}`}
+        position={[0, 0.095, 0.1]}
+        color="white"
+        fontSize={0.035}
+        bgColor="black"
+        padding={0.01}
+        bgRadius={0.01}
+      />
       {name && (
         <text
-          value={`Player: ${name}`}
+          value={name}
           position={[0, 0.065, 0.1]}
           color="white"
           fontSize={0.035}
@@ -103,10 +101,19 @@ export function Join({ seat, setUser }) {
       bgRadius={0.01}
       fontSize={0.05}
       onClick={e => {
-        if (phase === 'idle' || round === 'intermission') {
+        console.log('phase', phase)
+        console.log('round', round)
+        if (
+          phase === 'idle' ||
+          phase === 'queued' ||
+          round === 'intermission'
+        ) {
           const { uid, name } = e.avatar
+          console.log(`Joining seat ${seat} as ${name}`)
           setUser({ seat, uid, name })
+          console.log('setting user')
           dispatch('join', seat, name, uid)
+          console.log(`Dispatched join to seat ${seat} as ${name}`)
         }
       }}
     />
@@ -163,7 +170,7 @@ export function Seat({ seat }) {
   return (
     <>
       <text
-        value={`Seat: ${seat + 1}`}
+        value={`Player: ${seat + 1}`}
         position={[0, 0.1, 0.0025]}
         color="white"
         fontSize={0.02}
