@@ -174,7 +174,7 @@ export function ServerLogic() {
   }
 
   // * ------------------ PHASE SYSTEM ------------------ *
-  const QUEUE_TIME = 2.5
+  const QUEUE_TIME = 7.5
   const ENDING_TIME = 5
   useEffect(() => {
     // if idle and 2 players join, queue game
@@ -335,6 +335,7 @@ export function getStore(state = initialState) {
       join(state, seat, name, uid) {
         state.taken[seat] = true
         state.players[seat] = { name, uid, seat, money: 1000, bet: 0, time: 0 }
+        console.log(`Player ${seat + 1} joined`)
       },
       exit(state, seat) {
         const taken = state.taken.filter(Boolean)

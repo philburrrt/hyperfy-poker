@@ -101,10 +101,19 @@ export function Join({ seat, setUser }) {
       bgRadius={0.01}
       fontSize={0.05}
       onClick={e => {
-        if (phase === 'idle' || round === 'intermission') {
+        console.log('phase', phase)
+        console.log('round', round)
+        if (
+          phase === 'idle' ||
+          phase === 'queued' ||
+          round === 'intermission'
+        ) {
           const { uid, name } = e.avatar
+          console.log(`Joining seat ${seat} as ${name}`)
           setUser({ seat, uid, name })
+          console.log('setting user')
           dispatch('join', seat, name, uid)
+          console.log(`Dispatched join to seat ${seat} as ${name}`)
         }
       }}
     />
