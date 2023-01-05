@@ -6,7 +6,7 @@ import { Hand } from './pokersolver'
 
 // TODO:
 // * Players might still be able to play after folding (if more than 1 player left)
-// * When player 1 vs player 5, preflop skips player 5 turn and moves to flop
+// * Third player is unable to join
 
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
@@ -98,7 +98,6 @@ export function Node({ user, setUser }) {
   )
 }
 
-const QUEUE_TIME = 2.5
 export function ServerLogic() {
   const world = useWorld()
   const [state, dispatch] = useSyncState(state => state)
@@ -117,13 +116,7 @@ export function ServerLogic() {
     if (round === 'showdown') return 'intermission'
   }
 
-  // during intermission, check to see if there is an ogSeat
-  // if there isn't, then set the lowest index value in taken as the ogSeat and roundStart
-  // if there is, then set setRoundStart to the next seat in taken
-  // if there are no index values greater than the current roundStart, then set roundStart to the first index value in taken
-
   function getStartingSeat() {
-    // taken seats is an array of the index values of items in taken that are true
     const takenSeats = taken.reduce((acc, curr, i) => {
       if (curr) acc.push(i)
       return acc
@@ -144,7 +137,6 @@ export function ServerLogic() {
     }
   }
 
-  // the next turn will either be index values greater than the current turn in getActiveSeats(), or the first index value in getActiveSeats()
   function getNextTurn() {
     const activeHands = getActiveHands()
     const activeSeats = activeHands.map(hand => hand.seat)
@@ -182,6 +174,8 @@ export function ServerLogic() {
   }
 
   // * ------------------ PHASE SYSTEM ------------------ *
+  const QUEUE_TIME = 2.5
+  const ENDING_TIME = 5
   useEffect(() => {
     // if idle and 2 players join, queue game
     if (phase === 'idle') {
@@ -217,11 +211,13 @@ export function ServerLogic() {
       dispatch('setStatus', 'Shutting down...')
       setTimeout(() => {
         dispatch('reset')
-      }, 1000)
+      }, ENDING_TIME * 1000)
     }
   }, [phase, taken])
 
   // * ------------------ Intermission ------------------ *
+  const INTERMISSION_TIME = 5
+  const SHOWDOWN_TIME = 5
   useEffect(() => {
     if (round === 'intermission') {
       dispatch('setStatus', 'New round starting...')
@@ -235,7 +231,7 @@ export function ServerLogic() {
         }
       }
 
-      const timer = setTimeout(intermission, 5000)
+      const timer = setTimeout(intermission, INTERMISSION_TIME * 1000)
       if (phase === 'end') {
         clearTimeout(timer)
       }
@@ -256,7 +252,7 @@ export function ServerLogic() {
       dispatch('setTurn', null)
       setTimeout(() => {
         dispatch('setRound', getNextRound())
-      }, 10000)
+      }, SHOWDOWN_TIME * 1000)
 
       const activeHands = getActiveHands()
 
