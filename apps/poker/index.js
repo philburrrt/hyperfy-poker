@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Fragment } from 'react'
-import { useSyncState, DEG2RAD, useWorld, randomInt } from 'hyperfy'
+import { useSyncState, DEG2RAD, useWorld, randomInt, useFields } from 'hyperfy'
 import { UI, InfoBoard } from './ui'
 import { Table } from './table'
 import { Hand } from './pokersolver'
@@ -16,7 +16,9 @@ const cards = {
 }
 
 export default function Poker() {
+  const fields = useFields()
   const world = useWorld()
+  const model = fields.model
 
   const [user, setUser] = useState({
     seat: null,
@@ -27,7 +29,9 @@ export default function Poker() {
   return (
     <app>
       {world.isServer && <ServerLogic />}
-      <model src="poker_table.glb" scale={0.45} position={[0, 0.95, 0]} />
+      {model && (
+        <model src="poker_table.glb" scale={0.45} position={[0, 0.95, 0]} />
+      )}
       <Table />
       <Node user={user} setUser={setUser} />
       <Status />
@@ -174,7 +178,7 @@ export function ServerLogic() {
   }
 
   // * ------------------ PHASE SYSTEM ------------------ *
-  const QUEUE_TIME = 7.5
+  const QUEUE_TIME = 5
   const ENDING_TIME = 5
   useEffect(() => {
     // if idle and 2 players join, queue game
@@ -427,5 +431,17 @@ export function getStore(state = initialState) {
         state.actions++
       },
     },
+    fields: [
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'switch',
+        options: [
+          { label: 'Yes', value: true },
+          { label: 'No', value: false },
+        ],
+        initial: true,
+      },
+    ],
   }
 }
