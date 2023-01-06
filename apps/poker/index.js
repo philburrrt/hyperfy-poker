@@ -30,9 +30,7 @@ export default function Poker() {
   return (
     <app>
       {world.isServer && <ServerLogic />}
-      {model && (
-        <model src="poker_table.glb" scale={0.45} position={[0, 0.95, 0]} />
-      )}
+      {model && <model src="poker_table.glb" />}
       <Table />
       <Node user={user} setUser={setUser} />
       <Status />

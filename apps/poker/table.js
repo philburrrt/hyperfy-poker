@@ -18,13 +18,13 @@ export function Community() {
   return (
     <>
       <billboard axis="y">
-        <group position={groupPos} rotation={[DEG2RAD * -45, DEG2RAD * 1, 0]}>
+        <group position={groupPos} rotation={[DEG2RAD * -25, DEG2RAD * 1, 0]}>
           {community.map((card, i) => (
             <image
               key={i}
               src={`cards/${card}.png`}
-              width={0.25}
-              position={[0.05 * i, 0, 0.0025 * i]}
+              width={0.2}
+              position={[0.05 * i, 0.05, 0.0025 * i]}
             />
           ))}
         </group>
