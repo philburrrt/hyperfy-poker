@@ -11,8 +11,10 @@ export function Table() {
 
 export function Community() {
   const [community] = useSyncState(state => state.community)
+  const [round] = useSyncState(state => state.round)
   const groupPos = [-0.075, 1.25, -0.01]
   if (community.length === 0) return null
+  if (round === 'preflop') return null
   return (
     <>
       <billboard axis="y">

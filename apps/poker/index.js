@@ -5,9 +5,16 @@ import { Table } from './table'
 import { Hand } from './pokersolver'
 
 // TODO:
-// * Players might still be able to play after folding (if more than 1 player left)
-// * Third player is unable to join
-
+/*
+  * during flop, if the first player folds, the next action triggers the next round
+    - the next round proceeds correctly
+  * during flop, if the second player folds, it triggers a new round
+    - the next round proceeds correctly
+  * during preflop, if the first player folds, then the next action triggers the next round
+    - the next round proceeds correctly 
+  * during preflop, if the second player folds, it triggers a new round
+    - the next round proceeds correctly
+ */
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
 const cards = {
@@ -247,7 +254,8 @@ export function ServerLogic() {
     }
 
     // * ------------------ FLOP, TURN, RIVER ------------------ *
-    if (round === 'flop' || round === 'turn' || round === 'river') {
+    if (round === 'turn' || round === 'river') {
+      dispatch('community')
     }
 
     // * ------------------ SHOWDOWN ------------------ *
@@ -411,6 +419,9 @@ export function getStore(state = initialState) {
           if (player.name) state.players[i].hand = [deck.pop(), deck.pop()]
         })
         state.community = [deck.pop(), deck.pop(), deck.pop()]
+      },
+      community(state) {
+        state.community.push(state.deck.pop())
       },
       bet(state, type, seat, amount) {
         if (amount > state.bet) {

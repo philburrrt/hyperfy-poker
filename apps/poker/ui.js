@@ -180,7 +180,7 @@ export function Seat({ seat }) {
       />
       {name !== null && (
         <text
-          value={`Player: ${name}`}
+          value={name}
           position={[-0.15, 0.1, 0.0025]}
           color="white"
           fontSize={0.02}
