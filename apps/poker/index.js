@@ -6,14 +6,7 @@ import { Hand } from './pokersolver'
 
 // TODO:
 /*
-  * during flop, if the first player folds, the next action triggers the next round
-    - the next round proceeds correctly
-  * during flop, if the second player folds, it triggers a new round
-    - the next round proceeds correctly
-  * during preflop, if the first player folds, then the next action triggers the next round
-    - the next round proceeds correctly 
-  * during preflop, if the second player folds, it triggers a new round
-    - the next round proceeds correctly
+ * folds are causing 2 actions to be taken
  */
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
@@ -117,6 +110,7 @@ export function ServerLogic() {
     gameStart: null,
     roundStart: null,
   })
+  const [playerCountRound, setPlayerCountRound] = useState(null)
   // * ------------------ UTILS ------------------ *
   function getNextRound() {
     if (round === 'intermission') return 'preflop'
@@ -166,6 +160,12 @@ export function ServerLogic() {
       .map(player => {
         return { seat: player.seat, hand: player.hand }
       })
+  }
+
+  function getPlayerCountRound() {
+    const activeHands = getActiveHands()
+    console.log(activeHands)
+    return activeHands?.length
   }
 
   function shuffle() {
@@ -236,6 +236,7 @@ export function ServerLogic() {
 
       function intermission() {
         if (phase !== 'end') {
+          dispatch('deal', shuffle())
           dispatch('setRound', getNextRound())
           dispatch('setTurn', getStartingSeat())
           dispatch('setStatus', null)
@@ -249,12 +250,13 @@ export function ServerLogic() {
       return () => clearTimeout(timer)
     }
 
-    if (round === 'preflop') {
-      dispatch('deal', shuffle())
+    if (round === 'preflop' || round === 'flop') {
+      setPlayerCountRound(getPlayerCountRound())
     }
 
     // * ------------------ FLOP, TURN, RIVER ------------------ *
     if (round === 'turn' || round === 'river') {
+      setPlayerCountRound(getPlayerCountRound())
       dispatch('community')
     }
 
@@ -296,12 +298,17 @@ export function ServerLogic() {
     if (round !== 'showdown' && round !== 'intermission') {
       const activeHands = getActiveHands()
       if (activeHands?.length === 1) {
+        console.log(`Only one player has cards. Round is now showdown.`)
         dispatch('setRound', 'showdown')
         return
-      } else if (activeHands?.length === actions) {
+      } else if (playerCountRound === actions) {
+        console.log(`Player count: ${playerCountRound} | Actions: ${actions}`)
+        console.log(`All players have acted. Round is now ${getNextRound()}.`)
         dispatch('setRound', getNextRound())
         return
       } else {
+        console.log(`Player count: ${playerCountRound} | Actions: ${actions}`)
+        console.log(`Not all players have acted. Turn is now ${getNextTurn()}.`)
         dispatch('setTurn', getNextTurn())
       }
     }
