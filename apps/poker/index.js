@@ -6,7 +6,8 @@ import { Hand } from './pokersolver'
 
 // TODO:
 /*
- * folds are causing 2 actions to be taken
+ * turns are going to the right while starting seat is going to the left
+  - turns should also go to the left
  */
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
@@ -145,12 +146,12 @@ export function ServerLogic() {
   function getNextTurn() {
     const activeHands = getActiveHands()
     const activeSeats = activeHands.map(hand => hand.seat)
-    const nextSeat = activeSeats.find(seat => seat > turn)
-    if (!nextSeat) {
-      const lowestSeat = activeSeats.reduce((a, b) => Math.min(a, b))
-      return lowestSeat
-    } else {
+    const nextSeat = activeSeats.find(seat => seat < turn)
+    if (nextSeat) {
       return nextSeat
+    } else {
+      const highestSeat = activeSeats.reduce((a, b) => Math.max(a, b))
+      return highestSeat
     }
   }
 
@@ -164,7 +165,6 @@ export function ServerLogic() {
 
   function getPlayerCountRound() {
     const activeHands = getActiveHands()
-    console.log(activeHands)
     return activeHands?.length
   }
 
@@ -294,21 +294,15 @@ export function ServerLogic() {
   // determines which player's turn it is after each action taken
   useEffect(() => {
     if (actions == 0) return
-    // if only one player has cards, set round to showdown
     if (round !== 'showdown' && round !== 'intermission') {
       const activeHands = getActiveHands()
       if (activeHands?.length === 1) {
-        console.log(`Only one player has cards. Round is now showdown.`)
         dispatch('setRound', 'showdown')
         return
       } else if (playerCountRound === actions) {
-        console.log(`Player count: ${playerCountRound} | Actions: ${actions}`)
-        console.log(`All players have acted. Round is now ${getNextRound()}.`)
         dispatch('setRound', getNextRound())
         return
       } else {
-        console.log(`Player count: ${playerCountRound} | Actions: ${actions}`)
-        console.log(`Not all players have acted. Turn is now ${getNextTurn()}.`)
         dispatch('setTurn', getNextTurn())
       }
     }
@@ -354,7 +348,6 @@ export function getStore(state = initialState) {
       join(state, seat, name, uid) {
         state.taken[seat] = true
         state.players[seat] = { name, uid, seat, money: 1000, bet: 0, time: 0 }
-        console.log(`Player ${seat + 1} joined`)
       },
       exit(state, seat) {
         const taken = state.taken.filter(Boolean)
