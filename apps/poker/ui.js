@@ -180,7 +180,7 @@ export function Seat({ seat }) {
       />
       {name !== null && (
         <text
-          value={`Player: ${name}`}
+          value={name}
           position={[-0.15, 0.1, 0.0025]}
           color="white"
           fontSize={0.02}
@@ -221,7 +221,6 @@ export function Actions({ seat, user }) {
               if (turn === null) return console.log('not active')
               if (seat != turn) return console.log('not your turn')
               if (seat != user.seat) return console.log('not your seat')
-              if (button.action === 'fold') dispatch('fold', seat)
               let amount
               if (bet === 0) {
                 amount = 3

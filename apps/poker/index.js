@@ -5,9 +5,10 @@ import { Table } from './table'
 import { Hand } from './pokersolver'
 
 // TODO:
-// * Players might still be able to play after folding (if more than 1 player left)
-// * Third player is unable to join
-
+/*
+ * turns are going to the right while starting seat is going to the left
+  - turns should also go to the left
+ */
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
 const cards = {
@@ -110,6 +111,7 @@ export function ServerLogic() {
     gameStart: null,
     roundStart: null,
   })
+  const [playerCountRound, setPlayerCountRound] = useState(null)
   // * ------------------ UTILS ------------------ *
   function getNextRound() {
     if (round === 'intermission') return 'preflop'
@@ -144,12 +146,12 @@ export function ServerLogic() {
   function getNextTurn() {
     const activeHands = getActiveHands()
     const activeSeats = activeHands.map(hand => hand.seat)
-    const nextSeat = activeSeats.find(seat => seat > turn)
-    if (!nextSeat) {
-      const lowestSeat = activeSeats.reduce((a, b) => Math.min(a, b))
-      return lowestSeat
-    } else {
+    const nextSeat = activeSeats.find(seat => seat < turn)
+    if (nextSeat) {
       return nextSeat
+    } else {
+      const highestSeat = activeSeats.reduce((a, b) => Math.max(a, b))
+      return highestSeat
     }
   }
 
@@ -159,6 +161,11 @@ export function ServerLogic() {
       .map(player => {
         return { seat: player.seat, hand: player.hand }
       })
+  }
+
+  function getPlayerCountRound() {
+    const activeHands = getActiveHands()
+    return activeHands?.length
   }
 
   function shuffle() {
@@ -229,6 +236,7 @@ export function ServerLogic() {
 
       function intermission() {
         if (phase !== 'end') {
+          dispatch('deal', shuffle())
           dispatch('setRound', getNextRound())
           dispatch('setTurn', getStartingSeat())
           dispatch('setStatus', null)
@@ -242,12 +250,14 @@ export function ServerLogic() {
       return () => clearTimeout(timer)
     }
 
-    if (round === 'preflop') {
-      dispatch('deal', shuffle())
+    if (round === 'preflop' || round === 'flop') {
+      setPlayerCountRound(getPlayerCountRound())
     }
 
     // * ------------------ FLOP, TURN, RIVER ------------------ *
-    if (round === 'flop' || round === 'turn' || round === 'river') {
+    if (round === 'turn' || round === 'river') {
+      setPlayerCountRound(getPlayerCountRound())
+      dispatch('community')
     }
 
     // * ------------------ SHOWDOWN ------------------ *
@@ -284,13 +294,12 @@ export function ServerLogic() {
   // determines which player's turn it is after each action taken
   useEffect(() => {
     if (actions == 0) return
-    // if only one player has cards, set round to showdown
     if (round !== 'showdown' && round !== 'intermission') {
       const activeHands = getActiveHands()
       if (activeHands?.length === 1) {
         dispatch('setRound', 'showdown')
         return
-      } else if (activeHands?.length === actions) {
+      } else if (playerCountRound === actions) {
         dispatch('setRound', getNextRound())
         return
       } else {
@@ -339,7 +348,6 @@ export function getStore(state = initialState) {
       join(state, seat, name, uid) {
         state.taken[seat] = true
         state.players[seat] = { name, uid, seat, money: 1000, bet: 0, time: 0 }
-        console.log(`Player ${seat + 1} joined`)
       },
       exit(state, seat) {
         const taken = state.taken.filter(Boolean)
@@ -411,6 +419,9 @@ export function getStore(state = initialState) {
           if (player.name) state.players[i].hand = [deck.pop(), deck.pop()]
         })
         state.community = [deck.pop(), deck.pop(), deck.pop()]
+      },
+      community(state) {
+        state.community.push(state.deck.pop())
       },
       bet(state, type, seat, amount) {
         if (amount > state.bet) {
