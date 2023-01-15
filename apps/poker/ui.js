@@ -13,7 +13,6 @@ export function InfoBoard({ seat }) {
   const [occupied] = useSyncState(state => state.taken[seat])
   const { name, action, hand } = player
   return (
-    // rotate grouop 180 degrees
     <group rotation={[0, DEG2RAD * 180, 0]}>
       <text
         value={`Player: ${seat + 1}`}
@@ -90,6 +89,7 @@ export function Join({ seat, setUser }) {
   const world = useWorld()
   const [round, dispatch] = useSyncState(state => state.taken[seat])
   const [phase] = useSyncState(state => state.phase)
+  const [players] = useSyncState(state => state.players)
 
   return (
     <text
@@ -109,6 +109,11 @@ export function Join({ seat, setUser }) {
           round === 'intermission'
         ) {
           const { uid, name } = e.avatar
+          for (let i = 0; i < players.length; i++) {
+            if (players[i].uid === uid) {
+              return console.log('already in game')
+            }
+          }
           console.log(`Joining seat ${seat} as ${name}`)
           setUser({ seat, uid, name })
           console.log('setting user')

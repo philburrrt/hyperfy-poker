@@ -6,8 +6,7 @@ import { Hand } from './pokersolver'
 
 // TODO:
 /*
- * turns are going to the right while starting seat is going to the left
-  - turns should also go to the left
+ * 1 player can join multiple seats
  */
 export const tiltBack = [DEG2RAD * -35, 0, 0]
 
@@ -30,7 +29,7 @@ export default function Poker() {
   return (
     <app>
       {world.isServer && <ServerLogic />}
-      {model && <model src="poker_table.glb" />}
+      {model && <model src="poker-table.glb" />}
       <Table />
       <Node user={user} setUser={setUser} />
       <Status />
